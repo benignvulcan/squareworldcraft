@@ -1,0 +1,15 @@
+Installation Notes
+==================
+
+Install Python 3.4 or .5 or .6 or so (not sure what minimum requirements are).
+  Under Debian based GNU/Linuxes:
+    sudo apt install python3
+
+Install the pygame version corresponding to your Python version.
+  Under Debian based GNU/Linuxes:
+    Debian-based distros do not seem to package Pygame for Python 3, so use pip3:
+      sudo apt install python3-pip
+      python3 -m pip install -U pygame --user
+
+No reason this shouldn't work with other operating systems, except that Windows will need the icon symlinks replaced with actual copies of the files.
+
