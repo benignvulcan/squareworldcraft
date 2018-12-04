@@ -1073,8 +1073,10 @@ class CraftingWnd(Window):
     self.inventWnd = InventoryPanel(self, world.player, text='inventory panel')
     self.matrixWnd = MatrixPanel(self, text='matrix panel')
     self.outputSlot = ProductSlot(self, text='output')
-    self.matrixWnd.Subscribe(CHANGE, self.OnChange)
-    self.world.player.Subscribe(CHANGE, self.OnChange)
+    self.matrixWnd.Subscribe(CHANGE, self.OnMatrixChanged)
+    self.world.player.Subscribe(CHANGE, self.OnPlayerChanged)
+    self.matrix = [[]]
+    self.consumables = []
 
   def OnResize(self, oldSize):
     r = self.localRect.inflate(-8,-8)
@@ -1088,32 +1090,50 @@ class CraftingWnd(Window):
       return True
     return False
 
-  def OnChange(self, evt):
+  def OnMatrixChanged(self, evt):
     # a MatrixSlot changed its contents
-    matrix = self.matrixWnd.GetThingMatrix()
-    print('matrix =', matrix)
-    matrix = TrimMatrix(matrix)
-    print('trimmed matrix =', matrix)
-    consumables = [ thingy for rowlist in matrix for thingy in rowlist if not thingy is None ]
+    self.matrix = self.matrixWnd.GetThingMatrix()
+    #print('matrix =', self.matrix)
+    self.matrix = TrimMatrix(self.matrix)
+    #print('trimmed matrix =', self.matrix)
+    self.UpdateMatrixProduct()
+
+  def OnChange(self, evt):
+    print("CraftingWnd.OnChange() !")
+
+  def OnPlayerChanged(self, evt):
+    # Note that this is called every time the player changes in any way,
+    # even when this window is not visible or enabled!
+    self.UpdateConsumables()
+    self.UpdateOutputEnabled()
+
+  def UpdateConsumables(self):
+    self.consumables = [ thingy for rowlist in self.matrix for thingy in rowlist if not thingy is None ]
+    #print('consumables are', self.consumables)
+
+  def UpdateMatrixProduct(self):
+    self.UpdateConsumables()
     for (pattern, result) in crafting_productions:
-      print('comparing',pattern)
+      #print('comparing',pattern)
       found = True
-      if len(pattern) != len(matrix) or len(pattern[0]) != len(matrix[0]):
+      if len(pattern) != len(self.matrix) or len(pattern[0]) != len(self.matrix[0]):
         found = False
       else:
         for (row, col) in ((r,c) for r in range(len(pattern)) for c in range(len(pattern[r]))):
-          if not isinstance(matrix[row][col], pattern[row][col]):
+          if not isinstance(self.matrix[row][col], pattern[row][col]):
             found = False
             break
       if found:
         break
     if found:
-      print('Pattern match: {} -> {}'.format(pattern,result))
-      print('consumables are', consumables)
-      self.outputSlot.SetProduct(consumables, result())
-      self.outputSlot.SetEnabled( self.world.player.HasThings( (1, t) for t in consumables ) )
+      #print('Pattern match: {} -> {}'.format(pattern,result))
+      self.outputSlot.SetProduct(self.consumables, result())
+      self.UpdateOutputEnabled()
     else:
       self.outputSlot.SetProduct(None, None)
+
+  def UpdateOutputEnabled(self):
+    self.outputSlot.SetEnabled( self.world.player.HasThings( (1, t) for t in self.consumables ) )
 
 class AppWnd(Window):
 
