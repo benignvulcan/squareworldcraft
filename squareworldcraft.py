@@ -271,6 +271,8 @@ class WoodSitu(FlyweightThing):
   def GetColor(self): return (83,61,35)
 class Wood(WoodSitu):
   def GetColor(self): return (171,126,72)
+class Hands(FlyweightThing):
+  'Dummy tool for when no tool is used'
 class Pickaxe(FlyweightThing):
   pass
 class Woodaxe(FlyweightThing):
@@ -504,6 +506,7 @@ class Player(Observable):
       self.walkingQueue.remove(direction)
 
   def OnUsePrimaryBegin(self, hitpos):
+    print('OnUsePrimaryBegin')
     if self.wieldType is None:
       self.wieldType = Player.WIELD_TOOL
     self.wieldPos = hitpos
@@ -560,25 +563,26 @@ class Player(Observable):
     '''
     if not self.wieldPos is None:
       numheld, held = self.SelectedInventory()
-      if numheld and not held is None:
-        if self.wieldType is Player.WIELD_TOOL:
-          numthing, thing = self.WouldHarvestAt(self.wieldPos)
-          if numthing and not thing is None:
-            progress = self.world.progress.get(self.wieldPos, 0)
-            if progress >= thing.EnergyToHarvest():
-              self.UsePrimaryAt(self.wieldPos)
-            else:
-              j = dt * held.PowerEfficiency() // 10
-              self.world.progress[self.wieldPos] = progress + j
+      if self.wieldType is Player.WIELD_TOOL:
+        numthing, thing = self.WouldHarvestAt(self.wieldPos)
+        if numthing and not thing is None:
+          progress = self.world.progress.get(self.wieldPos, 0)
+          if progress >= thing.EnergyToHarvest():
+            self.UsePrimaryAt(self.wieldPos)
+          else:
+            if held is None:
+              held = Hands()
+            j = dt * held.PowerEfficiency() // 10
+            self.world.progress[self.wieldPos] = progress + j
+            self.world.Changed()
+      elif self.wieldType is Player.WIELD_MATERIAL and numheld and not held is None:
+        numtarget, target = self.world.things[self.wieldPos[1]][self.wieldPos[0]]
+        if numtarget == 0 and numheld and ChessboardDistance(self.wieldPos, self.pos) == 1:
+          if isinstance(held, (Wood, Stone, Malachite, NativeSilver, NativeGold, Copper, Silver, Gold)):
+            (numremoved, removed) = self.RemoveInventory( (1,held), self.inventory_selection )
+            if numremoved:
+              self.world.things[self.wieldPos[1]][self.wieldPos[0]] = (numremoved, removed)
               self.world.Changed()
-        elif self.wieldType is Player.WIELD_MATERIAL:
-          numtarget, target = self.world.things[self.wieldPos[1]][self.wieldPos[0]]
-          if numtarget == 0 and numheld and ChessboardDistance(self.wieldPos, self.pos) == 1:
-            if isinstance(held, (Wood, Stone, Malachite, NativeSilver, NativeGold, Copper, Silver, Gold)):
-              (numremoved, removed) = self.RemoveInventory( (1,held), self.inventory_selection )
-              if numremoved:
-                self.world.things[self.wieldPos[1]][self.wieldPos[0]] = (numremoved, removed)
-                self.world.Changed()
 
   def Update(self, dt):
     self.UpdateWalking(dt)
