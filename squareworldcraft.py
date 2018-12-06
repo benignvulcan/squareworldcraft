@@ -282,7 +282,7 @@ class Blade(FlyweightThing):
 class Hammer(FlyweightThing):
   def GetColor(self): return (127,127,127)
 class Vine(FlyweightThing):
-  def GetColor(self): return (0, 127, 0)
+  def GetColor(self): return (0, 191, 0)
 class Table(FlyweightThing):
   def GetColor(self): return (204,150,86)
 
