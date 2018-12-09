@@ -116,7 +116,7 @@ An Iconography
 
 '''
 
-import sys, enum, math, random, glob, colorsys
+import sys, enum, math, random, glob, colorsys, csv
 
 #import numpy as np
 import pygame
@@ -142,6 +142,11 @@ def ChessboardDistance(p, q):
   "Return the distance between p and q if you can only move horizontally, vertically, or on a 45 degree diagonal."
   return max( abs(p[0]-q[0]), abs(p[1]-q[1]) )
 
+def HSV2RGB(hsv):  # h=0-360, s=0-100, v=0-100
+  h, s, v = hsv
+  rgb = colorsys.hsv_to_rgb(h/360,s/100,v/100)
+  return (int(rgb[0]*255),int(rgb[1]*255),int(rgb[2]*255))
+
 class Thing:
 
   def __init__(self):
@@ -150,7 +155,17 @@ class Thing:
   def Name(self):
     return self.__class__.__name__
 
-  def GetColor(self): return (127,127,127)
+  color_rgb = (255,0,255)
+  color_hsv = (300,100,100)
+  hardness = 1
+  density = 1000
+  meltingpoint = None
+  boilingpoint = None
+  flametempmin = None
+  flametempmax = None
+  stacksize = 999
+
+  def GetColor(self): return HSV2RGB(self.color_hsv)
 
   icon_cache = {}
 
@@ -240,41 +255,65 @@ class TerrainGrass(TerrainLand):
 #  Pre-harvested are marked "situ", for "in situ" or "in the situation".
 # The Situ versions should have no icons or different icons.
 
-class StoneSitu(FlyweightThing):
-  def GetColor(self): return (127,127,127)
-class Stone(StoneSitu):
-  def GetColor(self): return (127,127,127)
+class Water(FlyweightThing): pass
 
-class MalachiteSitu(FlyweightThing):
-  #def GetColor(self): return (127,255,127)
-  def GetColor(self): return (62,120,82)  # sampled from Wikipedia photo
-class Malachite(MalachiteSitu):
-  pass
-class Copper(FlyweightThing):
-  def GetColor(self): return (223,90,31)
+class StoneSitu(FlyweightThing): pass
+class Stone(StoneSitu): pass
 
-class NativeSilverSitu(FlyweightThing):
-  def GetColor(self): return (191,191,191)
-class NativeSilver(NativeSilverSitu):
-  pass
-class Silver(FlyweightThing):
-  def GetColor(self): return (217,217,217)
+class CassiteriteSitu(FlyweightThing): pass
+class Cassiterite(CassiteriteSitu): pass
+class Tin(FlyweightThing): pass
 
-class NativeGoldSitu(FlyweightThing):
-  def GetColor(self): return (223,218,70)
-class NativeGold(NativeGoldSitu):
-  pass
-class Gold(FlyweightThing):
-  def GetColor(self): return (255,247,25)
+class MalachiteSitu(FlyweightThing): pass
+class Malachite(MalachiteSitu): pass
+class Copper(FlyweightThing): pass
 
-class WoodSitu(FlyweightThing):
-  def GetColor(self): return (83,61,35)
-class Wood(WoodSitu):
-  def GetColor(self): return (171,126,72)
+class NativeSilverSitu(FlyweightThing): pass
+class NativeSilver(NativeSilverSitu): pass
+class Silver(FlyweightThing): pass
+
+class NativeGoldSitu(FlyweightThing): pass
+class NativeGold(NativeGoldSitu): pass
+class Gold(FlyweightThing): pass
+
+class NativeAluminumSitu(FlyweightThing): pass
+class NativeAluminum(NativeAluminumSitu): pass
+class Aluminum(NativeAluminum): pass
+
+class BismuthiniteSitu(FlyweightThing): pass
+class Bismuthinite(BismuthiniteSitu): pass
+class Bismuth(FlyweightThing): pass
+
+class Garnierite(FlyweightThing): pass
+class Nickel(FlyweightThing): pass
+
+class NativePlatinumSitu(FlyweightThing): pass
+class NativePlatinum(NativePlatinumSitu): pass
+class Platinum(FlyweightThing): pass
+
+class Sphalerite(FlyweightThing): pass
+class Zinc(FlyweightThing): pass
+class Tetrahedrite(FlyweightThing): pass
+class Brass(FlyweightThing): pass
+class Bronze(FlyweightThing): pass
+class Steel(FlyweightThing): pass
+class Flint(FlyweightThing): pass
+class Diamond(FlyweightThing): pass
+class Hematite(FlyweightThing): pass
+class Limonite(FlyweightThing): pass
+class MagnetiteSitu(FlyweightThing): pass
+class Magnetite(MagnetiteSitu): pass
+class Iron(FlyweightThing): pass
+class GalenaSitu(FlyweightThing): pass
+class Galena(FlyweightThing): pass
+class Lead(FlyweightThing): pass
+
+class WoodSitu(FlyweightThing): pass
+class Wood(WoodSitu): pass
+
 class Hands(FlyweightThing):
   'Dummy tool for when no tool is used'
-class Pickaxe(FlyweightThing):
-  pass
+class Pickaxe(FlyweightThing): pass
 class Woodaxe(FlyweightThing):
   def GetColor(self): return (153,113,64)
 class Blade(FlyweightThing):
@@ -286,16 +325,77 @@ class Vine(FlyweightThing):
 class Table(FlyweightThing):
   def GetColor(self): return (204,150,86)
 
+def LoadMaterialsProperties():
+  with open('materials_properties.csv', newline='') as f:
+    attributes = []
+    sheet = csv.reader(f)
+    row = next(sheet)    # get the header row
+    for cell in row:
+      assert isinstance(cell, str)
+      assert cell.isidentifier()
+      attributes.append(cell)
+    print('attributes = ', attributes)
+    for row in sheet:
+      if len(row) < 2:
+        continue
+      klassname = row[0]
+      assert isinstance(klassname, str)
+      if not klassname.isidentifier():
+        continue
+      klass = globals()[klassname]
+      assert isinstance(klass, type)
+      #print(klass)
+      for i in range(1,len(row)):
+        assert i < len(attributes)
+        attr = attributes[i]
+        value = row[i]
+        if not value or value.isspace():
+          continue
+        if attr in ('color', 'color_rgb', 'color_hsv'):
+          value = tuple(map(int, value.split(',')))
+          assert len(value) == 3
+        else:
+          if value.isdigit():
+            value = int(value)
+          else:
+            value = float(value)
+        assert not attr in vars(klass)
+        print('{}.{} = {}'.format(klassname, attr, value))
+        setattr(klass, attr, value)
+
 harvestRules = \
-  [ (WoodSitu         , Woodaxe, Wood)
-  , (StoneSitu        , Pickaxe, Stone)
-  , (MalachiteSitu    , Pickaxe, Malachite)
-  , (NativeSilverSitu , Pickaxe, NativeSilver)
-  , (NativeGoldSitu   , Pickaxe, NativeGold)
-  , (Copper           , Pickaxe, Copper)
-  , (Silver           , Pickaxe, Silver)
-  , (Gold             , Pickaxe, Gold  )
-  , (Vine             , None,    Vine)
+  [ (WoodSitu           , Woodaxe, Wood)
+  , (StoneSitu          , Pickaxe, Stone)
+  , (Stone              , None,    Stone)
+  , (Wood               , None,    Wood)
+  , (Vine               , None,    Vine)
+
+  , (BismuthiniteSitu   , Pickaxe, Bismuthinite)
+  , (CassiteriteSitu    , Pickaxe, Cassiterite)
+  , (MagnetiteSitu      , Pickaxe, Magnetite)
+  , (MalachiteSitu      , Pickaxe, Malachite)
+  , (NativeAluminumSitu , Pickaxe, NativeAluminum)
+  , (NativeGoldSitu     , Pickaxe, NativeGold)
+  , (NativePlatinumSitu , Pickaxe, NativePlatinum)
+  , (NativeSilverSitu   , Pickaxe, NativeSilver)
+
+  , (Bismuthinite       , Pickaxe, Bismuthinite)
+  , (Cassiterite        , Pickaxe, Cassiterite)
+  , (Magnetite          , Pickaxe, Magnetite)
+  , (Malachite          , Pickaxe, Malachite)
+  , (NativeAluminum     , Pickaxe, NativeAluminum)
+  , (NativeGold         , Pickaxe, NativeGold)
+  , (NativePlatinum     , Pickaxe, NativePlatinum)
+  , (NativeSilver       , Pickaxe, NativeSilver)
+
+  , (Aluminum           , Pickaxe, Aluminum)
+  , (Bismuth            , Pickaxe, Bismuth)
+  , (Copper             , Pickaxe, Copper)
+  , (Gold               , Pickaxe, Gold)
+  , (Iron               , Pickaxe, Iron)
+  , (Platinum           , Pickaxe, Platinum)
+  , (Silver             , Pickaxe, Silver)
+  , (Tin                , Pickaxe, Tin)
   ]
 
 keyToWalkDirection = \
@@ -619,6 +719,10 @@ class World(Observable):
 
   def GenerateTrees(self):
     for i in range(5000):
+      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Stone())
+    for i in range(5000):
+      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Wood())
+    for i in range(5000):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Vine())
     for i in range(5000):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,WoodSitu())
@@ -631,12 +735,10 @@ class World(Observable):
       left = random.randrange(self.sz[0] - width)
       r = pygame.Rect(left, top, width, height)
       self.ThingFill(r, (1, StoneSitu()))
-      for j in range(random.randrange(2,16)):
-        self.GenerateVein(r, (1,MalachiteSitu()) )
-      for j in range(random.randrange(2,12)):
-        self.GenerateVein(r, (1,NativeSilverSitu()) )
-      for j in range(random.randrange(2,8)):
-        self.GenerateVein(r, (1,NativeGoldSitu()) )
+      ores = (NativeAluminumSitu, MagnetiteSitu, MalachiteSitu, CassiteriteSitu, NativeSilverSitu, NativePlatinumSitu, NativeGoldSitu)
+      for ore, idx in zip(ores, range(len(ores))):
+        for j in range(random.randrange(0,14)):
+          self.GenerateVein(r, (1,ore()) )
 
   def GenerateVein(self, rect, value):
     points = [(random.randrange(rect.left, rect.right), random.randrange(rect.top, rect.bottom))]
@@ -810,10 +912,6 @@ class WorldWnd(Window):
       return True
     return False
 
-def HSV2RGB(h,s,v):
-  rgb = colorsys.hsv_to_rgb(h/360,s/100,v/100)
-  return (int(rgb[0]*255),int(rgb[1]*255),int(rgb[2]*255))
-
 class HotbarSlot(Button):
 
   def OnChange(self, evt):
@@ -826,9 +924,9 @@ class HotbarWnd(Window):
   HOTBAR_ENTRIES = 10
   MARGIN = 2
   BUTTON_MAX_SIZE = 64
-  BODY_COLOR = HSV2RGB(30,10,80)
-  FRAME_COLOR = HSV2RGB(30,20,70)
-  SELECTION_COLOR = HSV2RGB(60,40,90)
+  BODY_COLOR = HSV2RGB((30,10,80))
+  FRAME_COLOR = HSV2RGB((30,20,70))
+  SELECTION_COLOR = HSV2RGB((60,40,90))
 
   def __init__(self, parent, rect, world, **kwargs):
     super().__init__(parent, rect, **kwargs)
@@ -1050,12 +1148,18 @@ class ProductSlot(DraggableHolder):
     self.Dirty()
 
 crafting_productions = \
-  [ ([[Stone],[Wood]], Hammer)
+  [ ([[Stone]], Blade)
+  , ([[Stone],[Wood]], Hammer)
   , ([[Blade],[Wood]], Woodaxe)
+
+  , ([[Bismuthinite]], Bismuth)
+  , ([[Cassiterite]], Tin)
+  , ([[Magnetite]], Iron)
   , ([[Malachite]], Copper)
-  , ([[NativeSilver]], Silver)
+  , ([[NativeAluminum]], Aluminum)
   , ([[NativeGold]], Gold)
-  , ([[Stone]], Blade)
+  , ([[NativePlatinum]], Platinum)
+  , ([[NativeSilver]], Silver)
   ]
 
 def TrimMatrix(matrix):
@@ -1231,6 +1335,8 @@ def main(argv):
   icon = pygame.image.load('icons/nested-squares-icon.png')
   pygame.display.set_icon(icon)
   #pygame.key.set_repeat(100, 100)
+
+  LoadMaterialsProperties()
 
   world = World()
   global manager
