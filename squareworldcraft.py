@@ -322,6 +322,9 @@ class Hammer(FlyweightThing):
   def GetColor(self): return (127,127,127)
 class Vine(FlyweightThing):
   def GetColor(self): return (0, 191, 0)
+class CampFire(Thing):
+  color_hsv = (20,100,100)
+
 class Table(FlyweightThing):
   def GetColor(self): return (204,150,86)
 
@@ -678,7 +681,7 @@ class Player(Observable):
       elif self.wieldType is Player.WIELD_MATERIAL and numheld and not held is None:
         numtarget, target = self.world.things[self.wieldPos[1]][self.wieldPos[0]]
         if numtarget == 0 and numheld and ChessboardDistance(self.wieldPos, self.pos) == 1:
-          if isinstance(held, (Wood, Stone, Malachite, NativeSilver, NativeGold, Copper, Silver, Gold)):
+          if isinstance(held, (Wood, Stone, Vine, CampFire, Malachite, NativeSilver, NativeGold, Copper, Silver, Gold)):
             (numremoved, removed) = self.RemoveInventory( (1,held), self.inventory_selection )
             if numremoved:
               self.world.things[self.wieldPos[1]][self.wieldPos[0]] = (numremoved, removed)
@@ -1151,6 +1154,7 @@ crafting_productions = \
   [ ([[Stone]], Blade)
   , ([[Stone],[Wood]], Hammer)
   , ([[Blade],[Wood]], Woodaxe)
+  , ([[Wood,Wood],[Wood,Wood]], CampFire)
 
   , ([[Bismuthinite]], Bismuth)
   , ([[Cassiterite]], Tin)
