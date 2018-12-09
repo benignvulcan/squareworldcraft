@@ -1065,6 +1065,34 @@ class InventoryPanel(Window):
         #self.islots[i].image = self.player.GetInventoryImage(i, size=z)
         i += 1
 
+class CatalystsPanel(Window):
+
+  def __init__(self, parent, world, **kwargs):
+    super().__init__(parent, **kwargs)
+    self.world = world
+    self.catalysts = []
+    self.size = 64
+    self.world.Subscribe(CHANGE, self.OnChange)
+
+  def OnChange(self, evt):
+    self.Rescan()
+
+  def Rescan(self):
+    self.catalysts = []
+    pp = self.world.player.pos
+    for y in (-1,0,1):
+      for x in (-1,0,1):
+        (numthings, something) = self.world.things[pp[1]+y][pp[0]+x]
+        if numthings and something:
+          self.catalysts.append(something)
+
+  def OnRender(self, surf):
+    i = 0
+    for catalystThing in self.catalysts:
+      icon = catalystThing.GetIcon((self.size, self.size))
+      surf.blit(icon, (i*self.size, 0))
+      i += 1
+
 class MatrixSlot(DraggableHolder):
 
   #def __init__(self, parentWnd, **kwargs):
@@ -1183,6 +1211,7 @@ class CraftingWnd(Window):
     super().__init__(parent, isModal=True, **kwargs)
     self.world = world
     self.inventWnd = InventoryPanel(self, world.player, text='inventory panel')
+    self.catalystsWnd = CatalystsPanel(self, world)
     self.matrixWnd = MatrixPanel(self, text='matrix panel')
     self.outputSlot = ProductSlot(self, text='output')
     self.matrixWnd.Subscribe(CHANGE, self.OnMatrixChanged)
@@ -1193,7 +1222,8 @@ class CraftingWnd(Window):
   def OnResize(self, oldSize):
     r = self.localRect.inflate(-8,-8)
     self.inventWnd.Resize(pygame.Rect(r.left, r.top, r.width//3, r.height))
-    self.matrixWnd.Resize(pygame.Rect(self.inventWnd.rect.right, r.top, r.width//3, r.height//2))
+    self.catalystsWnd.Resize(pygame.Rect(self.inventWnd.rect.right, r.top, r.width//3, 64))
+    self.matrixWnd.Resize(pygame.Rect(self.inventWnd.rect.right, self.catalystsWnd.rect.bottom+8, r.width//3, r.height//2))
     self.outputSlot.Resize(pygame.Rect(self.matrixWnd.rect.centerx-32, self.matrixWnd.rect.bottom, 64,64))
 
   def OnKeyDown(self, evt):
