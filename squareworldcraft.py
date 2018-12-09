@@ -1070,25 +1070,28 @@ class CatalystsPanel(Window):
   def __init__(self, parent, world, **kwargs):
     super().__init__(parent, **kwargs)
     self.world = world
-    self.catalysts = []
+    self.catalystThings = []
     self.size = 64
     self.world.Subscribe(CHANGE, self.OnChange)
+    self.world.player.Subscribe(CHANGE, self.OnChange)
 
   def OnChange(self, evt):
     self.Rescan()
+    super().OnChange(evt)
 
   def Rescan(self):
-    self.catalysts = []
+    print('CatalystsPanel.Rescan()')
+    self.catalystThings = []
     pp = self.world.player.pos
     for y in (-1,0,1):
       for x in (-1,0,1):
         (numthings, something) = self.world.things[pp[1]+y][pp[0]+x]
         if numthings and something:
-          self.catalysts.append(something)
+          self.catalystThings.append(something)
 
   def OnRender(self, surf):
     i = 0
-    for catalystThing in self.catalysts:
+    for catalystThing in self.catalystThings:
       icon = catalystThing.GetIcon((self.size, self.size))
       surf.blit(icon, (i*self.size, 0))
       i += 1
@@ -1179,19 +1182,19 @@ class ProductSlot(DraggableHolder):
     self.Dirty()
 
 crafting_productions = \
-  [ ([[Stone]], Blade)
-  , ([[Stone],[Wood]], Hammer)
-  , ([[Blade],[Wood]], Woodaxe)
-  , ([[Wood,Wood],[Wood,Wood]], CampFire)
+  [ ([], [[Stone]], Blade)
+  , ([], [[Stone],[Wood]], Hammer)
+  , ([], [[Blade],[Wood]], Woodaxe)
+  , ([], [[Wood,Wood],[Wood,Wood]], CampFire)
 
-  , ([[Bismuthinite]], Bismuth)
-  , ([[Cassiterite]], Tin)
-  , ([[Magnetite]], Iron)
-  , ([[Malachite]], Copper)
-  , ([[NativeAluminum]], Aluminum)
-  , ([[NativeGold]], Gold)
-  , ([[NativePlatinum]], Platinum)
-  , ([[NativeSilver]], Silver)
+  , ([CampFire], [[Bismuthinite]], Bismuth)
+  , ([CampFire], [[Cassiterite]], Tin)
+  , ([CampFire], [[Magnetite]], Iron)
+  , ([CampFire], [[Malachite]], Copper)
+  , ([CampFire], [[NativeAluminum]], Aluminum)
+  , ([CampFire], [[NativeGold]], Gold)
+  , ([CampFire], [[NativePlatinum]], Platinum)
+  , ([CampFire], [[NativeSilver]], Silver)
   ]
 
 def TrimMatrix(matrix):
@@ -1214,6 +1217,7 @@ class CraftingWnd(Window):
     self.catalystsWnd = CatalystsPanel(self, world)
     self.matrixWnd = MatrixPanel(self, text='matrix panel')
     self.outputSlot = ProductSlot(self, text='output')
+    self.catalystsWnd.Subscribe(CHANGE, self.OnMatrixChanged)
     self.matrixWnd.Subscribe(CHANGE, self.OnMatrixChanged)
     self.world.player.Subscribe(CHANGE, self.OnPlayerChanged)
     self.matrix = [[]]
@@ -1255,16 +1259,19 @@ class CraftingWnd(Window):
 
   def UpdateMatrixProduct(self):
     self.UpdateConsumables()
-    for (pattern, result) in crafting_productions:
+    catalystTypesPresent = tuple( type(catalystThing) for catalystThing in self.catalystsWnd.catalystThings )
+    for (catalystTypes, pattern, result) in crafting_productions:
       #print('comparing',pattern)
-      found = True
+      found = False
+      if not all(catalystType in catalystTypesPresent for catalystType in catalystTypes):
+        continue
       if len(pattern) != len(self.matrix) or len(pattern[0]) != len(self.matrix[0]):
-        found = False
-      else:
-        for (row, col) in ((r,c) for r in range(len(pattern)) for c in range(len(pattern[r]))):
-          if not isinstance(self.matrix[row][col], pattern[row][col]):
-            found = False
-            break
+        continue
+      found = True
+      for (row, col) in ((r,c) for r in range(len(pattern)) for c in range(len(pattern[r]))):
+        if not isinstance(self.matrix[row][col], pattern[row][col]):
+          found = False
+          break
       if found:
         break
     if found:
