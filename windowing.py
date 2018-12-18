@@ -7,7 +7,7 @@ TODO:
   * actually use dirty rect list in OnRedraw
 '''
 
-import pygame, enum, math
+import pygame, enum, math, colorsys
 
 _DEBUG = False
 
@@ -48,6 +48,15 @@ def BitSeqToInt(bits):
     value |= b << i
     i += 1
   return value
+
+def HSV2RGB(hsv):  # h=0-360, s=0-100, v=0-100
+  h, s, v = hsv
+  rgb = colorsys.hsv_to_rgb(h/360,s/100,v/100)
+  return (int(rgb[0]*255),int(rgb[1]*255),int(rgb[2]*255))
+
+assert HSV2RGB((0,0,0)) == (0,0,0)
+assert HSV2RGB((0,0,50)) == (127,127,127)
+assert HSV2RGB((0,0,100)) == (255,255,255)
 
 _UE0 = pygame.USEREVENT
 CHANGE  = _UE0 + 1
@@ -146,6 +155,17 @@ class Window(Observable):
 
   def Raise(self):
     return self.parentWnd.RaiseChildWnd(self)
+
+  def GetColorTheme(self):
+    if hasattr(self, 'colorTheme'):
+      return self.colorTheme
+    elif self.parentWnd is None:
+      return None
+    else:
+      return self.parentWnd.GetColorTheme()
+
+  def SetColorTheme(self, colorTheme):
+    self.colorTheme = colorTheme
 
   def GetFont(self, font_purpose):
     if self.parentWnd is None:
@@ -327,11 +347,11 @@ class Window(Observable):
 
   def RenderFill(self, surf):
     # Default is to render a white background with a black border.
-    surf.fill( pygame.Color('0xC0C0C0') )
+    surf.fill( self.GetColorTheme()['bg'] )
 
   def RenderFrame(self, surf):
     #pygame.draw.rect(surf, (0,0,0), pygame.Rect(0,0,self.localRect.width-2,self.localRect.height-2), 2)
-    pygame.draw.rect(surf, (0,0,0), self.localRect, 2)
+    pygame.draw.rect(surf, self.GetColorTheme()['fg'], self.localRect, 2)
 
   def RenderImage(self, surf):
     if hasattr(self, 'image') and self.image:
@@ -340,7 +360,7 @@ class Window(Observable):
 
   def RenderText(self, surf):
     if self.text:
-      textimg = self.GetFont('TEXT').render(self.text, True, (0,0,0))
+      textimg = self.GetFont('TEXT').render(self.text, True, self.GetColorTheme()['fg'])
       return surf.blit(textimg, (surf.get_width()/2 - textimg.get_width()/2, surf.get_height()/2 - textimg.get_height()/2))
 
   def OnRender(self, surf):
@@ -392,6 +412,59 @@ class Window(Observable):
     self.dirtyRects = []
     return dirtyList
 
+class ColorTheme:
+  '''A proper color scheme is an enormously problematic issue.
+    Simple outputs include colors for:
+      foreground/figure (incl. font color)
+      background/ground
+      highlight
+      lowlight
+      hover (or not) (inapplicable to contact-touch devices)
+      focused (or not)
+      depressed (or not)
+      selected (or not)
+    tint = mix with white
+    tone = mix with gray
+    shade = mix with black
+  '''
+  def __init__(self, colorTheme=None, hue=None, saturation=None):
+    self._values = \
+      { 'bg' : 75
+      , 'fg' : 0
+      , 'hi' : 100
+      , 'lo' : 0
+      , 'bg_selected' : 88
+      , 'fg_selected' : 0
+      }
+    self._hue = 0
+    self._sat = 0
+    if not colorTheme is None:
+      self._values.update(colorTheme._values)
+      self._hue = colorTheme._hue
+      self._sat = colorTheme._sat
+    if not hue is None:
+      self._hue = hue
+    if not saturation is None:
+      self._sat = saturation
+
+  def __getitem__(self, key):
+    return HSV2RGB((self._hue, self._sat, self._values.get(key)))
+
+  def SetValue(self, key, value):
+    assert key in self._values
+    self._values[key] = value
+    return self
+
+  def Colored(self, hue, saturation):
+    'Return a new ColorTheme with the given hue and saturation'
+    return ColorTheme(colorTheme=self, hue=hue, saturation=saturation)
+
+  def InvertedValue(self):
+    ct = ColorTheme(self)
+    for key in ct._values:
+      ct._values[key] = 100 - ct._values[key]
+    return ct
+
 class WindowManager(Window):
 
   'A special Window that acts as a top-most container of Windows.'
@@ -399,6 +472,7 @@ class WindowManager(Window):
   def __init__(self, **kwargs):
     assert not 'parentWnd' in kwargs
     super().__init__(None, **kwargs)
+    self.colorTheme = ColorTheme()
     self.fonts = {}
     self.SetFonts()
 
@@ -420,28 +494,27 @@ class WindowManager(Window):
     super().RemoveChildWnd(wnd)
     return wnd
 
-class ColorScheme:
-  '''A proper color scheme is an enormously problematic issue.
-    Simple outputs include colors for:
-      foreground/figure (incl. font color)
-      background/ground
-      highlight
-      lowlight
-      hover (or not) (inapplicable to contact-touch devices)
-      focused (or not)
-      depressed (or not)
-      selected (or not)
-    And a font.
-  '''
-  def __init__(self):
-    self.bg = pygame.Color('0xC0C0C0')
-    self.fg = pygame.Color('0x000000')
-    self.hi = pygame.Color('0xFFFFFF')
-    self.lo = pygame.Color('0x000000')
-    self.bg_selected = pygame.Color('0xE0E0E0')
-    self.fg_selected = pygame.Color('0x000000')
+class ProgressBar(Window):
 
-_SCHEME = ColorScheme()
+  def __init__(self, parentWnd, rect=None, progress=0, **kwargs):
+    super().__init__(parentWnd, rect=rect, **kwargs)
+    self.progress = progress
+    self.colorTheme = parentWnd.GetColorTheme().Colored(120,100).InvertedValue().SetValue('bg',0)
+
+  def SetProgress(self, newProgress):
+    self.progress = newProgress
+    self.Dirty()
+
+  def OnRender(self, surf):
+    self.RenderFill(surf)
+    self.RenderFrame(surf)
+    colors = self.GetColorTheme()
+    #pygame.draw.rect(surf, colors['bg'], self.localRect)
+    BORDER = 2
+    pbar = pygame.Rect(self.localRect).inflate(-BORDER, -BORDER)
+    pbar.width = pbar.width * self.progress // 100
+    print('pbar =',pbar)
+    pygame.draw.rect(surf, colors['fg'], pbar)
 
 class Button(Window):
 
@@ -483,16 +556,17 @@ class Button(Window):
     return True
 
   def OnRender(self, surf):
+    colors = self.GetColorTheme()
     if self.isSelected:
-      bg = _SCHEME.bg_selected
+      bg = colors['bg_selected']
     else:
-      bg = _SCHEME.bg
+      bg = colors['bg']
     if self.isDepressed:
-      e1 = _SCHEME.hi
-      e2 = _SCHEME.lo
+      e1 = colors['hi']
+      e2 = colors['lo']
     else:
-      e1 = _SCHEME.lo
-      e2 = _SCHEME.hi
+      e1 = colors['lo']
+      e2 = colors['hi']
     pygame.draw.rect(surf, bg, self.localRect)
     thickness = 2
     tl, br = RectInsetFramePolys(self.localRect, thickness)
@@ -580,8 +654,9 @@ class DraggableHolder(Window):
     self.RenderFill(surf)
     thickness = 2
     tl, br = RectInsetFramePolys(self.localRect, thickness)
-    draw_polygon_filled(surf, _SCHEME.hi, br)
-    draw_polygon_filled(surf, _SCHEME.lo, tl)
+    colors = self.GetColorTheme()
+    draw_polygon_filled(surf, colors['hi'], br)
+    draw_polygon_filled(surf, colors['lo'], tl)
     if hasattr(self, 'image') and self.image:
       interior = self.localRect.inflate(-thickness*2, -thickness*2)
       surf.blit(self.image, (thickness,thickness), area=interior)

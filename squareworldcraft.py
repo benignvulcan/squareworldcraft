@@ -116,7 +116,7 @@ An Iconography
 
 '''
 
-import sys, enum, math, random, glob, colorsys, csv
+import sys, enum, math, random, glob, csv
 
 #import numpy as np
 import pygame
@@ -141,11 +141,6 @@ def ChessboardDistance(p, q):
   # A.K.A. Chebyshev distance.
   "Return the distance between p and q if you can only move horizontally, vertically, or on a 45 degree diagonal."
   return max( abs(p[0]-q[0]), abs(p[1]-q[1]) )
-
-def HSV2RGB(hsv):  # h=0-360, s=0-100, v=0-100
-  h, s, v = hsv
-  rgb = colorsys.hsv_to_rgb(h/360,s/100,v/100)
-  return (int(rgb[0]*255),int(rgb[1]*255),int(rgb[2]*255))
 
 class Thing:
 
@@ -1369,22 +1364,30 @@ def ChooseVideoMode(margin=(96,96)):
 
 def main(argv):
   print("Initializing...")
-  pygame.display.set_caption("Squareworld")
+
+  global manager
+  manager = WindowManager(text='manager')
 
   #screen = pygame.display.set_mode((1536,800))
   screen = pygame.display.set_mode(ChooseVideoMode(), pygame.RESIZABLE)
+
+  screct = screen.get_rect()
+  barect = pygame.Rect(screct.width//4, screct.centery-16, screct.width//2, 32)
+  progressBar = ProgressBar(manager, barect, 0, text='Initializing...')
+  pygame.display.update(manager.RenderDirtyNow(screen))
+
   if DEBUG:
     if screen.get_flags() & pygame.HWACCEL: print("screen is HARDWARE ACCELERATED!")
     if screen.get_flags() & pygame.HWSURFACE: print("screen is in video memory")
+  pygame.display.set_caption("SquareWorldCraft")
   icon = pygame.image.load('icons/nested-squares-icon.png')
   pygame.display.set_icon(icon)
   #pygame.key.set_repeat(100, 100)
 
   LoadMaterialsProperties()
-
+  progressBar.SetProgress(25)
+  pygame.display.update(manager.RenderDirtyNow(screen))
   world = World()
-  global manager
-  manager = WindowManager(text='manager')
   appWnd = AppWnd(manager, screen, world, text='appWnd')
 
   #monofont = pygame.font.SysFont('freemono',16,bold=True)
@@ -1393,6 +1396,9 @@ def main(argv):
   #assert font_test_img.get_height() == 17
 
   print("Ready.")
+  progressBar.SetProgress(100)
+  pygame.display.update(manager.RenderDirtyNow(screen))
+  progressBar.Delete()
 
   clock = pygame.time.Clock()
   target_fps = 60
