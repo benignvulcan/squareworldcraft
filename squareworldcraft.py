@@ -695,6 +695,7 @@ class World(Observable):
   def __init__(self, *posargs, **kwargs):
     super().__init__(*posargs, **kwargs)
     self.sz = (2000,2000)
+    self.area = self.sz[0]*self.sz[1]
     grass_flyweight = TerrainGrass()  # avoiding the ctor call significantly speeds this up
     #row_prototype = [ grass_flyweight for r in range(self.sz[1]) ]
     #self.ground = [ row_prototype[:] for c in range(self.sz[0]) ]
@@ -719,28 +720,30 @@ class World(Observable):
   def GenerateTerrain(self, progressCallback):
     # Assuming ground[] is already just Grass
     p = 5
+    plots = self.area // 10000
     for value in (TerrainSand(), TerrainWater()):
-      for i in range(100):
+      for i in range(plots):
         width = random.randrange(12,64)
         height = random.randrange(12,64)
         top = random.randrange(self.sz[1] - height)
         left = random.randrange(self.sz[0] - width)
         self.GroundFill(pygame.Rect(left, top, width, height), value)
-        p += (70/200)
+        p += 70/(2*plots)
         progressCallback(int(p))
 
   def GenerateTrees(self):
-    for i in range(5000):
+    count = self.area // 200
+    for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Stone())
-    for i in range(5000):
+    for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Wood())
-    for i in range(5000):
+    for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Vine())
-    for i in range(5000):
+    for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,WoodSitu())
 
   def GenerateRock(self):
-    for i in range(100):
+    for i in range(self.area // 5000):
       width = random.randrange(12,128)
       height = random.randrange(12,128)
       top = random.randrange(self.sz[1] - height)
@@ -749,7 +752,7 @@ class World(Observable):
       self.ThingFill(r, (1, StoneSitu()))
       ores = (NativeAluminumSitu, MagnetiteSitu, MalachiteSitu, CassiteriteSitu, NativeSilverSitu, NativePlatinumSitu, NativeGoldSitu)
       for ore, idx in zip(ores, range(len(ores))):
-        for j in range(random.randrange(0,14)):
+        for j in range(random.randrange(0,14-len(ores))):
           self.GenerateVein(r, (1,ore()) )
 
   def GenerateVein(self, rect, value):
