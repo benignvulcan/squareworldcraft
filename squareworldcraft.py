@@ -294,9 +294,9 @@ class Platinum(FlyweightThing): pass
 class Sphalerite(FlyweightThing): pass
 class Zinc(FlyweightThing): pass
 class Tetrahedrite(FlyweightThing): pass
-class Brass(FlyweightThing): pass
-class Bronze(FlyweightThing): pass
-class Steel(FlyweightThing): pass
+class Brass(FlyweightThing): pass  # copper + zinc; often 2/3 copper + 1/3 zinc
+class Bronze(FlyweightThing): pass # modern standard bronze is 88% copper + 12% tin
+class Steel(FlyweightThing): pass  # iron with up to 1.7% carbon
 class Flint(FlyweightThing): pass
 class Diamond(FlyweightThing): pass
 class Hematite(FlyweightThing): pass
@@ -335,7 +335,7 @@ def LoadMaterialsProperties():
     row = next(sheet)    # get the header row
     for cell in row:
       assert isinstance(cell, str)
-      assert cell.isidentifier()
+      assert cell.isidentifier() or cell.startswith('#')
       attributes.append(cell)
     print('attributes = ', attributes)
     for row in sheet:
@@ -345,6 +345,9 @@ def LoadMaterialsProperties():
       assert isinstance(klassname, str)
       if not klassname.isidentifier():
         continue
+      if not klassname in globals():
+        print('WARNING: class "{}" not defined'.format(klassname))
+        continue
       klass = globals()[klassname]
       assert isinstance(klass, type)
       #print(klass)
@@ -352,7 +355,7 @@ def LoadMaterialsProperties():
         assert i < len(attributes)
         attr = attributes[i]
         value = row[i]
-        if not value or value.isspace():
+        if not value or value.isspace() or value.startswith('#'):
           continue
         if attr in ('color', 'color_rgb', 'color_hsv'):
           value = tuple(map(int, value.split(',')))
