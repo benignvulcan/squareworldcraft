@@ -694,13 +694,13 @@ class World(Observable):
 
   def __init__(self, *posargs, **kwargs):
     super().__init__(*posargs, **kwargs)
-    self.sz = (1000,1000)
-    self.ground = [ [ TerrainGrass() for r in range(self.sz[1]) ] for c in range(self.sz[0]) ]
+    self.sz = (2000,2000)
+    grass_flyweight = TerrainGrass()  # avoiding the ctor call significantly speeds this up
+    #row_prototype = [ grass_flyweight for r in range(self.sz[1]) ]
+    #self.ground = [ row_prototype[:] for c in range(self.sz[0]) ]
+    self.ground = [ [ grass_flyweight for r in range(self.sz[1]) ] for c in range(self.sz[0]) ]
     #self.ground = np.random.randint(0,4,self.sz)
     self.things = [ [ (0,None) for r in range(self.sz[1]) ] for c in range(self.sz[0]) ]
-    self.GenerateTerrain()
-    self.GenerateTrees()
-    self.GenerateRock()
     self.progress = {}  # map from (x,y) to milliseconds remaining to finish choping/pickaxing/harvesting Thing
     self.player = Player(self)
     self.icons = {}
@@ -708,8 +708,17 @@ class World(Observable):
     self.player.Subscribe(CHANGE, self.OnChange)
     self.Changed()
 
-  def GenerateTerrain(self):
+  def Generate(self, progressCallback):
+    self.GenerateTerrain(progressCallback)
+    progressCallback(75)
+    self.GenerateTrees()
+    progressCallback(80)
+    self.GenerateRock()
+    progressCallback(90)
+
+  def GenerateTerrain(self, progressCallback):
     # Assuming ground[] is already just Grass
+    p = 5
     for value in (TerrainSand(), TerrainWater()):
       for i in range(100):
         width = random.randrange(12,64)
@@ -717,6 +726,8 @@ class World(Observable):
         top = random.randrange(self.sz[1] - height)
         left = random.randrange(self.sz[0] - width)
         self.GroundFill(pygame.Rect(left, top, width, height), value)
+        p += (70/200)
+        progressCallback(int(p))
 
   def GenerateTrees(self):
     for i in range(5000):
@@ -1374,7 +1385,10 @@ def main(argv):
   screct = screen.get_rect()
   barect = pygame.Rect(screct.width//4, screct.centery-16, screct.width//2, 32)
   progressBar = ProgressBar(manager, barect, 0, text='Initializing...')
-  pygame.display.update(manager.RenderDirtyNow(screen))
+  def UpdateProgress(p):
+    progressBar.SetProgress(p)
+    pygame.display.update(manager.RenderDirtyNow(screen))
+  UpdateProgress(0)
 
   if DEBUG:
     if screen.get_flags() & pygame.HWACCEL: print("screen is HARDWARE ACCELERATED!")
@@ -1385,9 +1399,9 @@ def main(argv):
   #pygame.key.set_repeat(100, 100)
 
   LoadMaterialsProperties()
-  progressBar.SetProgress(25)
-  pygame.display.update(manager.RenderDirtyNow(screen))
+  UpdateProgress(5)
   world = World()
+  world.Generate(UpdateProgress)
   appWnd = AppWnd(manager, screen, world, text='appWnd')
 
   #monofont = pygame.font.SysFont('freemono',16,bold=True)
@@ -1396,8 +1410,7 @@ def main(argv):
   #assert font_test_img.get_height() == 17
 
   print("Ready.")
-  progressBar.SetProgress(100)
-  pygame.display.update(manager.RenderDirtyNow(screen))
+  UpdateProgress(100)
   progressBar.Delete()
 
   clock = pygame.time.Clock()
