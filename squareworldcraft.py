@@ -201,6 +201,7 @@ class Thing:
     return Thing.icon_cache[key]
 
   def isTraversable(self): return False
+  def WouldHarvestUsing(self, tool): return (0,None)
 
   def UseDuration(self):
     'Time (in ms) it takes to use/swing this tool once'
@@ -223,10 +224,15 @@ class FlyweightThing(Thing):
 
   instances = {}  # all instances of FlyweightThing and derived classes
 
-  def __new__(cls):
-    if not cls in FlyweightThing.instances:
-      FlyweightThing.instances[cls] = super(FlyweightThing, cls).__new__(cls)
-    return FlyweightThing.instances[cls]
+  def __new__(cls, *posargs, **kwargs):
+    key = (cls,) + posargs + tuple(sorted(kwargs.items()))
+    if not key in FlyweightThing.instances:
+      # Oddly, object.__new__() doesn't call cls.__init__()
+      # But it does complain about excess arguments (if cls.__init__ is not explicitly defined).
+      # (Apparently cls.__call__() calls cls.__init__())
+      # So little is lost by discarding args to derived class ctors.
+      FlyweightThing.instances[key] = super(FlyweightThing, cls).__new__(cls)
+    return FlyweightThing.instances[key]
 
 class Terrain(FlyweightThing):
   'Terrain is what is left when a cell is bare empty'
@@ -252,74 +258,107 @@ class TerrainGrass(TerrainLand):
 
 class Water(FlyweightThing): pass
 
-class StoneSitu(FlyweightThing): pass
-class Stone(StoneSitu): pass
+class Situatable(FlyweightThing):
+  def __init__(self, *posargs, inSitu=False, **kwargs):
+    super().__init__(*posargs, **kwargs)
+    self._inSitu = inSitu
+  def InSitu(self): return self._inSitu
+  def Name(self):
+    name = super().Name()
+    if self._inSitu:
+      name += 'Situ'
+    return name
 
-class CassiteriteSitu(FlyweightThing): pass
-class Cassiterite(CassiteriteSitu): pass
-class Tin(FlyweightThing): pass
+class Harvestable(Situatable):
+  def WouldHarvestUsing(self, tool):
+    if (self._inSitu and isinstance(tool, Pickaxe)) or \
+       (not self._inSitu and isinstance(tool, (Pickaxe,Hands, type(None)))):
+      return (1, self.__class__())
+    else:
+      return (0,None)
 
-class MalachiteSitu(FlyweightThing): pass
-class Malachite(MalachiteSitu): pass
-class Copper(FlyweightThing): pass
+class PickUpAble(Harvestable): pass
+class Rock(Harvestable): pass
+class Ore(Harvestable): pass
+class Metal(PickUpAble): pass
+class Gem(Harvestable): pass
+class Plant(Harvestable):
+  def WouldHarvestUsing(self, tool):
+    if (self._inSitu and isinstance(tool, Woodaxe)) or \
+       (not self._inSitu and isinstance(tool, (Woodaxe,Hands, type(None)))):
+      return (1, self.__class__())
+    else:
+      return (0,None)
 
-class NativeSilverSitu(FlyweightThing): pass
-class NativeSilver(NativeSilverSitu): pass
-class Silver(FlyweightThing): pass
+class Stone(Rock): pass
 
-class NativeGoldSitu(FlyweightThing): pass
-class NativeGold(NativeGoldSitu): pass
-class Gold(FlyweightThing): pass
+assert Stone() is Stone()
+assert Stone(inSitu=True) is Stone(inSitu=True)
+assert Stone() != Stone(inSitu=True)
+assert Stone(inSitu=False) != Stone(inSitu=True)
+assert Stone(inSitu=False) != Stone()
+print(Stone().Name(), Stone(inSitu=True).Name(), Stone(inSitu=False).Name())
+assert Stone().Name() == 'Stone'
+assert Stone(inSitu=True).Name() == 'StoneSitu'
+assert Stone(inSitu=False).Name() == 'Stone'
 
-class NativeAluminumSitu(FlyweightThing): pass
-class NativeAluminum(NativeAluminumSitu): pass
-class Aluminum(NativeAluminum): pass
+class Cassiterite(Ore): pass
+class Tin(Metal): pass
 
-class BismuthiniteSitu(FlyweightThing): pass
-class Bismuthinite(BismuthiniteSitu): pass
-class Bismuth(FlyweightThing): pass
+class Malachite(Ore): pass
+class Copper(Metal): pass
 
-class Garnierite(FlyweightThing): pass
-class Nickel(FlyweightThing): pass
+class NativeSilver(Ore): pass
+class Silver(Metal): pass
 
-class NativePlatinumSitu(FlyweightThing): pass
-class NativePlatinum(NativePlatinumSitu): pass
-class Platinum(FlyweightThing): pass
+class NativeGold(Ore): pass
+class Gold(Metal): pass
 
-class Sphalerite(FlyweightThing): pass
-class Zinc(FlyweightThing): pass
-class Tetrahedrite(FlyweightThing): pass
-class Brass(FlyweightThing): pass  # copper + zinc; often 2/3 copper + 1/3 zinc
-class Bronze(FlyweightThing): pass # modern standard bronze is 88% copper + 12% tin
-class Steel(FlyweightThing): pass  # iron with up to 1.7% carbon
-class Flint(FlyweightThing): pass
-class Diamond(FlyweightThing): pass
-class Hematite(FlyweightThing): pass
-class Limonite(FlyweightThing): pass
-class MagnetiteSitu(FlyweightThing): pass
-class Magnetite(MagnetiteSitu): pass
-class Iron(FlyweightThing): pass
-class GalenaSitu(FlyweightThing): pass
-class Galena(FlyweightThing): pass
-class Lead(FlyweightThing): pass
+class NativeAluminum(Ore): pass
+class Aluminum(Metal): pass
 
-class WoodSitu(FlyweightThing): pass
-class Wood(WoodSitu): pass
+class Bismuthinite(Ore): pass
+class Bismuth(Metal): pass
 
-class Hands(FlyweightThing):
-  'Dummy tool for when no tool is used'
-class Pickaxe(FlyweightThing): pass
-class Woodaxe(FlyweightThing):
-  def GetColor(self): return (153,113,64)
-class Blade(FlyweightThing):
-  def GetColor(self): return (127,127,127)
-class Hammer(FlyweightThing):
-  def GetColor(self): return (127,127,127)
-class Vine(FlyweightThing):
+class Garnierite(Ore): pass
+class Nickel(Metal): pass
+
+class NativePlatinum(Ore): pass
+class Platinum(Metal): pass
+
+class Sphalerite(Ore): pass
+class Zinc(Metal): pass
+class Tetrahedrite(Ore): pass
+class Brass(Metal): pass  # copper + zinc; often 2/3 copper + 1/3 zinc
+class Bronze(Metal): pass # modern standard bronze is 88% copper + 12% tin
+class Steel(Metal): pass  # iron with up to 1.7% carbon
+class Flint(Rock): pass
+class Diamond(Gem): pass
+class Hematite(Ore): pass
+class Limonite(Ore): pass
+class Magnetite(Ore): pass
+class Iron(Metal): pass
+class Galena(Ore): pass
+class Lead(Metal): pass
+
+class Wood(Plant): pass
+class Vine(Plant):
   def GetColor(self): return (0, 191, 0)
-class CampFire(Thing):
-  color_hsv = (20,100,100)
 
+class Tool(FlyweightThing): pass
+class Component(FlyweightThing): pass
+class Hands(Tool):
+  'Dummy tool for when no tool is used'
+class Pickaxe(Tool): pass
+class Woodaxe(Tool):
+  def GetColor(self): return (153,113,64)
+class Blade(Component):
+  def GetColor(self): return (127,127,127)
+class Hammer(Tool):
+  def GetColor(self): return (127,127,127)
+
+class CampFire(FlyweightThing):
+  color_hsv = (20,100,100)
 class Table(FlyweightThing):
   def GetColor(self): return (204,150,86)
 
@@ -363,41 +402,6 @@ def LoadMaterialsProperties():
         assert not attr in vars(klass)
         print('{}.{} = {}'.format(klassname, attr, value))
         setattr(klass, attr, value)
-
-harvestRules = \
-  [ (WoodSitu           , Woodaxe, Wood)
-  , (StoneSitu          , Pickaxe, Stone)
-  , (Stone              , None,    Stone)
-  , (Wood               , None,    Wood)
-  , (Vine               , None,    Vine)
-
-  , (BismuthiniteSitu   , Pickaxe, Bismuthinite)
-  , (CassiteriteSitu    , Pickaxe, Cassiterite)
-  , (MagnetiteSitu      , Pickaxe, Magnetite)
-  , (MalachiteSitu      , Pickaxe, Malachite)
-  , (NativeAluminumSitu , Pickaxe, NativeAluminum)
-  , (NativeGoldSitu     , Pickaxe, NativeGold)
-  , (NativePlatinumSitu , Pickaxe, NativePlatinum)
-  , (NativeSilverSitu   , Pickaxe, NativeSilver)
-
-  , (Bismuthinite       , Pickaxe, Bismuthinite)
-  , (Cassiterite        , Pickaxe, Cassiterite)
-  , (Magnetite          , Pickaxe, Magnetite)
-  , (Malachite          , Pickaxe, Malachite)
-  , (NativeAluminum     , Pickaxe, NativeAluminum)
-  , (NativeGold         , Pickaxe, NativeGold)
-  , (NativePlatinum     , Pickaxe, NativePlatinum)
-  , (NativeSilver       , Pickaxe, NativeSilver)
-
-  , (Aluminum           , Pickaxe, Aluminum)
-  , (Bismuth            , Pickaxe, Bismuth)
-  , (Copper             , Pickaxe, Copper)
-  , (Gold               , Pickaxe, Gold)
-  , (Iron               , Pickaxe, Iron)
-  , (Platinum           , Pickaxe, Platinum)
-  , (Silver             , Pickaxe, Silver)
-  , (Tin                , Pickaxe, Tin)
-  ]
 
 keyToWalkDirection = \
   { pygame.K_LEFT  : (-1, 0)
@@ -577,10 +581,8 @@ class Player(Observable):
     if ChessboardDistance(hitpos, self.pos) <= 1:
       numtarget, target = self.world.things[hitpos[1]][hitpos[0]]
       if numtarget:
-        for (xinput, xtool, xoutput) in harvestRules:
-          if isinstance(target, xinput):
-            if xtool is None or (isinstance(tool, xtool) and numtool):
-              return (1,xoutput())
+        (n,t) = target.WouldHarvestUsing(tool)
+        return (n*numtarget, t)
     return (0,None)
 
   def UsePrimaryAt(self, hitpos):
@@ -694,7 +696,7 @@ class World(Observable):
 
   def __init__(self, *posargs, **kwargs):
     super().__init__(*posargs, **kwargs)
-    self.sz = (2000,2000)
+    self.sz = (1000,1000)
     self.area = self.sz[0]*self.sz[1]
     grass_flyweight = TerrainGrass()  # avoiding the ctor call significantly speeds this up
     #row_prototype = [ grass_flyweight for r in range(self.sz[1]) ]
@@ -712,7 +714,7 @@ class World(Observable):
   def Generate(self, progressCallback):
     self.GenerateTerrain(progressCallback)
     progressCallback(75)
-    self.GenerateTrees()
+    self.GenerateThings()
     progressCallback(80)
     self.GenerateRock()
     progressCallback(90)
@@ -731,7 +733,7 @@ class World(Observable):
         p += 70/(2*plots)
         progressCallback(int(p))
 
-  def GenerateTrees(self):
+  def GenerateThings(self):
     count = self.area // 200
     for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Stone())
@@ -740,7 +742,7 @@ class World(Observable):
     for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Vine())
     for i in range(count):
-      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,WoodSitu())
+      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Wood(inSitu=True))
 
   def GenerateRock(self):
     for i in range(self.area // 5000):
@@ -749,18 +751,19 @@ class World(Observable):
       top = random.randrange(self.sz[1] - height)
       left = random.randrange(self.sz[0] - width)
       r = pygame.Rect(left, top, width, height)
-      self.ThingFill(r, (1, StoneSitu()))
-      ores = (NativeAluminumSitu, MagnetiteSitu, MalachiteSitu, CassiteriteSitu, NativeSilverSitu, NativePlatinumSitu, NativeGoldSitu)
+      self.ThingFill(r, (1, Stone(inSitu=True)))
+      ores = (NativeAluminum, Magnetite, Malachite, Cassiterite, NativeSilver, NativePlatinum, NativeGold)
       for ore, idx in zip(ores, range(len(ores))):
         for j in range(random.randrange(0,14-len(ores))):
-          self.GenerateVein(r, (1,ore()) )
+          self.GenerateVein(r, (1,ore(inSitu=True)) )
 
   def GenerateVein(self, rect, value):
+    stone = Stone(inSitu=True)
     points = [(random.randrange(rect.left, rect.right), random.randrange(rect.top, rect.bottom))]
     p = points[0]
     for i in range(random.randrange(29)):
       p2 = (p[0]+random.randrange(-1,2), p[1]+random.randrange(-1,2))
-      if self.CollidePoint(p2) and self.things[p2[1]][p2[0]][1] == StoneSitu() and not p2 in points:
+      if self.CollidePoint(p2) and self.things[p2[1]][p2[0]][1] == stone and not p2 in points:
         points.append(p2)
         p = p2
     for p in points:
