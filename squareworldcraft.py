@@ -271,8 +271,8 @@ class Situatable(FlyweightThing):
 
 class Harvestable(Situatable):
   def WouldHarvestUsing(self, tool):
-    if (self._inSitu and isinstance(tool, Pickaxe)) or \
-       (not self._inSitu and isinstance(tool, (Pickaxe,Hands, type(None)))):
+    if (self._inSitu and isinstance(tool, (Hammer, Pickaxe))) or \
+       (not self._inSitu and isinstance(tool, (Woodaxe,Hammer,Pickaxe,Hands, type(None)))):
       return (1, self.__class__())
     else:
       return (0,None)
@@ -345,17 +345,23 @@ class Wood(Plant): pass
 class Vine(Plant):
   def GetColor(self): return (0, 191, 0)
 
-class Tool(FlyweightThing): pass
-class Component(FlyweightThing): pass
+class OfMaterial(Thing):
+  def __init__(self, material, *posargs, **kwargs):
+    super().__init__(*posargs, **kwargs)
+    self._material = material
+  def Material(self): return self._material
+  def GetColor(self): return self._material.GetColor()
+  #def Name(self):
+  #  return '{} {}'.format(self._material.Name, super().Name())
+
+class Tool(Thing): pass
+class Component(Thing): pass
 class Hands(Tool):
   'Dummy tool for when no tool is used'
 class Pickaxe(Tool): pass
-class Woodaxe(Tool):
-  def GetColor(self): return (153,113,64)
-class Blade(Component):
-  def GetColor(self): return (127,127,127)
-class Hammer(Tool):
-  def GetColor(self): return (127,127,127)
+class Woodaxe(Tool, OfMaterial): pass
+class AxeHead(Component, OfMaterial): pass
+class Hammer(Tool, OfMaterial): pass
 
 class CampFire(FlyweightThing):
   color_hsv = (20,100,100)
@@ -435,8 +441,8 @@ class Player(Observable):
     self.world = world
     self.pos = [initialpos[0], initialpos[1]]
     self.inventory = [ [0,None] for i in range(40) ]
-    self.inventory[0] = [1, Woodaxe()]
-    self.inventory[1] = [1, Pickaxe()]
+    #self.inventory[0] = [1, Woodaxe()]
+    #self.inventory[1] = [1, Pickaxe()]
     self.inventory_selection = 0  # first item
     self.walkingTimeout = 0  # Time to wait until next walking can be performed
     self.walkingQueue = []   # Direction(s) to try to walk in - most recent first
@@ -1196,20 +1202,22 @@ class ProductSlot(DraggableHolder):
       self.image = thing.GetIcon((self.rect.width, self.rect.height))
     self.Dirty()
 
+# [ catalyst_list, pattern_matrix, output_constructor ]
+# m is the matrix of input Thing instances that matched the pattern
 crafting_productions = \
-  [ ([], [[Stone]], Blade)
-  , ([], [[Stone],[Wood]], Hammer)
-  , ([], [[Blade],[Wood]], Woodaxe)
-  , ([], [[Wood,Wood],[Wood,Wood]], CampFire)
+  [ ([], [[Stone],[Stone]],         lambda m: AxeHead(Stone()))
+  , ([], [[Stone],[Wood]],          lambda m: Hammer(m[0][0]))
+  , ([], [[AxeHead],[Wood]],        lambda m: Woodaxe(m[0][0].Material()))
+  , ([], [[Wood,Wood],[Wood,Wood]], lambda m: CampFire())
 
-  , ([CampFire], [[Bismuthinite]], Bismuth)
-  , ([CampFire], [[Cassiterite]], Tin)
-  , ([CampFire], [[Magnetite]], Iron)
-  , ([CampFire], [[Malachite]], Copper)
-  , ([CampFire], [[NativeAluminum]], Aluminum)
-  , ([CampFire], [[NativeGold]], Gold)
-  , ([CampFire], [[NativePlatinum]], Platinum)
-  , ([CampFire], [[NativeSilver]], Silver)
+  , ([CampFire], [[Bismuthinite]],   lambda m: Bismuth())
+  , ([CampFire], [[Cassiterite]],    lambda m: Tin())
+  , ([CampFire], [[Magnetite]],      lambda m: Iron())
+  , ([CampFire], [[Malachite]],      lambda m: Copper())
+  , ([CampFire], [[NativeAluminum]], lambda m: Aluminum())
+  , ([CampFire], [[NativeGold]],     lambda m: Gold())
+  , ([CampFire], [[NativePlatinum]], lambda m: Platinum())
+  , ([CampFire], [[NativeSilver]],   lambda m: Silver())
   ]
 
 def TrimMatrix(matrix):
@@ -1275,7 +1283,7 @@ class CraftingWnd(Window):
   def UpdateMatrixProduct(self):
     self.UpdateConsumables()
     catalystTypesPresent = tuple( type(catalystThing) for catalystThing in self.catalystsWnd.catalystThings )
-    for (catalystTypes, pattern, result) in crafting_productions:
+    for (catalystTypes, pattern, fresult) in crafting_productions:
       #print('comparing',pattern)
       found = False
       if not all(catalystType in catalystTypesPresent for catalystType in catalystTypes):
@@ -1291,7 +1299,7 @@ class CraftingWnd(Window):
         break
     if found:
       #print('Pattern match: {} -> {}'.format(pattern,result))
-      self.outputSlot.SetProduct(self.consumables, result())
+      self.outputSlot.SetProduct(self.consumables, fresult(self.matrix))
       self.UpdateOutputEnabled()
     else:
       self.outputSlot.SetProduct(None, None)
