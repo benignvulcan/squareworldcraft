@@ -79,7 +79,7 @@ BismuthBronze,,,,,,,,,,,,,#DF: Tin+2xCopper+Bismuth
 BlackBronze,,,,,,,,,,,,,#DF: 2xCopper+Silver+Gold
 Brass,"35,75,90",3.5,165,599.5,60,8565,1193,1303,,,,,#DF: Zinc+Copper
 Bronze,"30,75,80",,,,60,8800,910,2300,,,,,#DF: Tin+Copper
-Electrum,,,,,,,,,,,,,#DF: Silver+Gold
+Electrum,"48,36,85",,,,,,,,,,,,#DF: Silver+Gold
 FinePewter,,,,,,,,,,,,,#DF: 3xTin+Copper
 LayPewter,,,,,,,,,,,,,#DF: 2xTin+Copper+Lead
 NickelSilver,,,,,,,,,,,,,#DF: 2xNIckel+Copper+Zinc

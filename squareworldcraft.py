@@ -281,6 +281,7 @@ class PickUpAble(Harvestable): pass
 class Rock(Harvestable): pass
 class Ore(Harvestable): pass
 class Metal(PickUpAble): pass
+class Alloy(Metal): pass
 class Gem(Harvestable): pass
 class Plant(Harvestable):
   def WouldHarvestUsing(self, tool):
@@ -329,9 +330,10 @@ class Platinum(Metal): pass
 class Sphalerite(Ore): pass
 class Zinc(Metal): pass
 class Tetrahedrite(Ore): pass
-class Brass(Metal): pass  # copper + zinc; often 2/3 copper + 1/3 zinc
-class Bronze(Metal): pass # modern standard bronze is 88% copper + 12% tin
-class Steel(Metal): pass  # iron with up to 1.7% carbon
+class Brass(Alloy): pass  # copper + zinc; often 2/3 copper + 1/3 zinc
+class Bronze(Alloy): pass # modern standard bronze is 88% copper + 12% tin
+class Electrum(Alloy): pass # silver+gold
+class Steel(Alloy): pass  # iron with up to 1.7% carbon
 class Flint(Rock): pass
 class Diamond(Gem): pass
 class Hematite(Ore): pass
@@ -748,7 +750,8 @@ class World(Observable):
     for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Vine())
     for i in range(count):
-      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Wood(inSitu=True))
+      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = \
+        (random.randrange(4)+random.randrange(3)+1, Wood(inSitu=True))
 
   def GenerateRock(self):
     for i in range(self.area // 5000):
@@ -1218,6 +1221,8 @@ crafting_productions = \
   , ([CampFire], [[NativeGold]],     lambda m: Gold())
   , ([CampFire], [[NativePlatinum]], lambda m: Platinum())
   , ([CampFire], [[NativeSilver]],   lambda m: Silver())
+  , ([CampFire], [[Copper,Tin]],     lambda m: Bronze())
+  , ([CampFire], [[Silver,Gold]],    lambda m: Electrum())
   ]
 
 def TrimMatrix(matrix):
