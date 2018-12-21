@@ -1219,24 +1219,54 @@ class ProductSlot(DraggableHolder):
       self.image = thing.GetIcon((self.rect.width, self.rect.height))
     self.Dirty()
 
+class ProductsPanel(Window):
+  def __init__(self, parent, **kwargs):
+    super().__init__(parent, **kwargs)
+    self.size = 64
+    self._consumables = []
+    self._productSomeThings = []
+  def SetProducts(self, consumables, somethings):
+    self._consumables = consumables
+    self._productSomeThings = somethings
+    print("productSomeThings =", somethings)
+    self.Dirty()
+  def GetProducts(self):
+    return self._productSomeThings[:]
+  def OnRender(self, surf):
+    print('ProductsPanel.OnRender()')
+    super().OnRender(surf)
+    i = 0
+    for numthing, productThing in self._productSomeThings:
+      print('Rendering product #{}'.format(i))
+      icon = productThing.GetIcon((self.size, self.size))
+      surf.blit(icon, (i*self.size, 0))
+      i += 1
+
 # [ catalyst_list, pattern_matrix, output_constructor ]
 # m is the matrix of input Thing instances that matched the pattern
 crafting_productions = \
-  [ ([], [[Stone],[Stone]],         lambda m: AxeHead(Stone()))
-  , ([], [[Stone],[Wood]],          lambda m: Hammer(m[0][0]))
-  , ([], [[AxeHead],[Wood]],        lambda m: Woodaxe(m[0][0].Material()))
-  , ([], [[Wood,Wood],[Wood,Wood]], lambda m: CampFire())
+  [ ([], [[Stone],[Stone]],         lambda m: [(1,AxeHead(Stone()))])
+  , ([], [[Stone],[Wood]],          lambda m: [(1,Hammer(m[0][0]))])
+  , ([], [[AxeHead],[Wood]],        lambda m: [(1,Woodaxe(m[0][0].Material()))])
+  , ([], [[Wood,Wood],[Wood,Wood]], lambda m: [(1,CampFire())])
 
-  , ([CampFire], [[Bismuthinite]],   lambda m: Bismuth())
-  , ([CampFire], [[Cassiterite]],    lambda m: Tin())
-  , ([CampFire], [[Magnetite]],      lambda m: Iron())
-  , ([CampFire], [[Malachite]],      lambda m: Copper())
-  , ([CampFire], [[NativeAluminum]], lambda m: Aluminum())
-  , ([CampFire], [[NativeGold]],     lambda m: Gold())
-  , ([CampFire], [[NativePlatinum]], lambda m: Platinum())
-  , ([CampFire], [[NativeSilver]],   lambda m: Silver())
-  , ([CampFire], [[Copper,Tin]],     lambda m: Bronze())
-  , ([CampFire], [[Silver,Gold]],    lambda m: Electrum())
+  , ([CampFire], [[Bismuthinite]],   lambda m: [(2,Bismuth())])
+  , ([CampFire], [[Cassiterite]],    lambda m: [(2,Tin())])
+  , ([CampFire], [[Galena]],         lambda m: [(2,Lead()),(1,Silver())])
+  , ([CampFire], [[Garnierite]],     lambda m: [(2,Nickel())])
+  , ([CampFire], [[Hematite]],       lambda m: [(2,Iron())])
+  , ([CampFire], [[Limonite]],       lambda m: [(2,Iron())])
+  , ([CampFire], [[Magnetite]],      lambda m: [(2,Iron())])
+  , ([CampFire], [[Malachite]],      lambda m: [(2,Copper())])
+  , ([CampFire], [[NativeAluminum]], lambda m: [(2,Aluminum())])
+  , ([CampFire], [[NativeGold]],     lambda m: [(2,Gold())])
+  , ([CampFire], [[NativePlatinum]], lambda m: [(2,Platinum())])
+  , ([CampFire], [[NativeSilver]],   lambda m: [(2,Silver())])
+  , ([CampFire], [[Sphalerite]],     lambda m: [(2,Zinc())])
+  , ([CampFire], [[Tetrahedrite]],   lambda m: [(2,Copper(),(1,Silver()))])
+
+  , ([CampFire], [[Copper,Tin]],     lambda m: [(2,Bronze())])
+  , ([CampFire], [[Silver,Gold]],    lambda m: [(2,Electrum())])
   ]
 
 def TrimMatrix(matrix):
@@ -1258,9 +1288,12 @@ class CraftingWnd(Window):
     self.inventWnd = InventoryPanel(self, world.player, text='inventory panel')
     self.catalystsWnd = CatalystsPanel(self, world)
     self.matrixWnd = MatrixPanel(self, text='matrix panel')
-    self.outputSlot = ProductSlot(self, text='output')
+    #self.outputSlot = ProductSlot(self, text='output')
+    self.buildButton = Button(self, text='<--')
+    self.productsWnd = ProductsPanel(self)
     self.catalystsWnd.Subscribe(CHANGE, self.OnMatrixChanged)
     self.matrixWnd.Subscribe(CHANGE, self.OnMatrixChanged)
+    self.buildButton.Subscribe(CLICK, self.OnClick)
     self.world.player.Subscribe(CHANGE, self.OnPlayerChanged)
     self.matrix = [[]]
     self.consumables = []
@@ -1270,7 +1303,9 @@ class CraftingWnd(Window):
     self.inventWnd.Resize(pygame.Rect(r.left, r.top, r.width//3, r.height))
     self.catalystsWnd.Resize(pygame.Rect(self.inventWnd.rect.right, r.top, r.width//3, 64))
     self.matrixWnd.Resize(pygame.Rect(self.inventWnd.rect.right, self.catalystsWnd.rect.bottom+8, r.width//3, r.height//2))
-    self.outputSlot.Resize(pygame.Rect(self.matrixWnd.rect.centerx-32, self.matrixWnd.rect.bottom, 64,64))
+    #self.outputSlot.Resize(pygame.Rect(self.matrixWnd.rect.centerx-32, self.matrixWnd.rect.bottom, 64,64))
+    self.buildButton.Resize(pygame.Rect(self.matrixWnd.rect.left, self.matrixWnd.rect.bottom, 64, 64))
+    self.productsWnd.Resize(pygame.Rect(self.matrixWnd.rect.left+64, self.matrixWnd.rect.bottom, self.matrixWnd.rect.width-64,64))
 
   def OnKeyDown(self, evt):
     if evt.key == pygame.K_ESCAPE:
@@ -1302,7 +1337,7 @@ class CraftingWnd(Window):
   def UpdateMatrixProduct(self):
     self.UpdateConsumables()
     catalystTypesPresent = tuple( type(catalystThing) for catalystThing in self.catalystsWnd.catalystThings )
-    for (catalystTypes, pattern, fresult) in crafting_productions:
+    for (catalystTypes, pattern, fresults) in crafting_productions:
       #print('comparing',pattern)
       found = False
       if not all(catalystType in catalystTypesPresent for catalystType in catalystTypes):
@@ -1318,13 +1353,24 @@ class CraftingWnd(Window):
         break
     if found:
       #print('Pattern match: {} -> {}'.format(pattern,result))
-      self.outputSlot.SetProduct(self.consumables, fresult(self.matrix))
+      #self.outputSlot.SetProduct(self.consumables, fresult(self.matrix))
+      self.productsWnd.SetProducts(self.consumables, fresults(self.matrix) )
       self.UpdateOutputEnabled()
     else:
-      self.outputSlot.SetProduct(None, None)
+      #self.outputSlot.SetProduct(None, None)
+      self.productsWnd.SetProducts([], [])
 
   def UpdateOutputEnabled(self):
-    self.outputSlot.SetEnabled( self.world.player.HasThings( (1, t) for t in self.consumables ) )
+    #self.outputSlot.SetEnabled( self.world.player.HasThings( (1, t) for t in self.consumables ) )
+    self.productsWnd.SetEnabled( self.world.player.HasThings( (1, t) for t in self.consumables ) )
+
+  def OnClick(self, evt):
+    print('CraftingWnd.OnClick({})'.format(evt))
+    if self.world.player.HasThings( (1, t) for t in self.consumables ):
+      for t in self.consumables:
+        numremoved, thingremoved = self.world.player.RemoveInventory( (1, t) )
+      for p in self.productsWnd.GetProducts():
+        self.world.player.AddInventory( p )
 
 class AppWnd(Window):
 
