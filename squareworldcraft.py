@@ -365,6 +365,20 @@ class Woodaxe(Tool, OfMaterial): pass
 class AxeHead(Component, OfMaterial): pass
 class Hammer(Tool, OfMaterial): pass
 
+# TODO:
+#   Stones -> Stone Furnace (higher temperature than CampFire)
+#   Clay --[Furnace]--> Ceramic Bowl/Crucible
+#   Sand + Clay --[Furnace]--> Bricks
+#   Sand + Clay --[Furnace]--> Mold(Anvil)
+#   Bloomery - the earliest sort of smelting furnace
+#   Forge - a better open fire, using coal/coke/charcoal, bellows, tuyere & hearth
+#   Metal + Mold(Anvil) --[Forge?]--> Anvil
+#   Bricks -> Brick Furnace (higher temperature than Stone Furnace)
+#   Metal --[Anvil+Forge?]-> PickaxeHead
+#   Wood + PickaxeHead -> Pickaxe (Pickaxe is faster than Hammer, metal is tougher than Stone)
+#   Shovel (faster than Hands)
+#   Crucible ?
+
 class CampFire(FlyweightThing):
   color_hsv = (20,100,100)
 class Table(FlyweightThing):
