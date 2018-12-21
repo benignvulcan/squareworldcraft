@@ -272,8 +272,7 @@ class Situatable(FlyweightThing):
 
 class Harvestable(Situatable):
   def WouldHarvestUsing(self, tool):
-    if (self._inSitu and isinstance(tool, (Hammer, Pickaxe))) or \
-       (not self._inSitu and isinstance(tool, (Woodaxe,Hammer,Pickaxe,Hands, type(None)))):
+    if (self._inSitu and isinstance(tool, (Hammer, Pickaxe))) or not self._inSitu:
       return (1, self.__class__())
     else:
       return (0,None)
@@ -286,8 +285,7 @@ class Alloy(Metal): pass
 class Gem(Harvestable): pass
 class Plant(Harvestable):
   def WouldHarvestUsing(self, tool):
-    if (self._inSitu and isinstance(tool, Woodaxe)) or \
-       (not self._inSitu and isinstance(tool, (Woodaxe,Hands, type(None)))):
+    if (self._inSitu and isinstance(tool, Woodaxe)) or not self._inSitu:
       return (1, self.__class__())
     else:
       return (0,None)
