@@ -756,7 +756,7 @@ class World(Observable):
         progressCallback(int(p))
 
   def GenerateThings(self):
-    count = self.area // 200
+    count = self.area // 400
     for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Stone())
     for i in range(count):
@@ -775,16 +775,30 @@ class World(Observable):
       left = random.randrange(self.sz[0] - width)
       r = pygame.Rect(left, top, width, height)
       self.ThingFill(r, (1, Stone(inSitu=True)))
-      ores = (NativeAluminum, Magnetite, Malachite, Cassiterite, NativeSilver, NativePlatinum, NativeGold)
-      for ore, idx in zip(ores, range(len(ores))):
-        for j in range(random.randrange(0,14-len(ores))):
-          self.GenerateVein(r, (1,ore(inSitu=True)) )
+      ores = list(ore for ore, count in 
+        { Bismuthinite : 3
+        , Cassiterite : 2
+        , Galena : 3
+        , Garnierite : 3
+        , Hematite : 3
+        , Limonite : 3
+        , Magnetite : 3
+        , Malachite : 3
+        , NativeAluminum : 5
+        , NativeGold : 1
+        , NativePlatinum : 1
+        , NativeSilver : 2
+        , Sphalerite : 3
+        , Tetrahedrite : 4
+        }.items() for rep in range(count))
+      for j in range(width*height//120):
+        self.GenerateVein(r, (1, random.choice(ores)(inSitu=True)) )
 
-  def GenerateVein(self, rect, value):
+  def GenerateVein(self, rect, value, maxSize=12):
     stone = Stone(inSitu=True)
     points = [(random.randrange(rect.left, rect.right), random.randrange(rect.top, rect.bottom))]
     p = points[0]
-    for i in range(random.randrange(29)):
+    for i in range(random.randrange(maxSize)):
       p2 = (p[0]+random.randrange(-1,2), p[1]+random.randrange(-1,2))
       if self.CollidePoint(p2) and self.things[p2[1]][p2[0]][1] == stone and not p2 in points:
         points.append(p2)
@@ -1263,7 +1277,7 @@ crafting_productions = \
   , ([CampFire], [[NativePlatinum]], lambda m: [(2,Platinum())])
   , ([CampFire], [[NativeSilver]],   lambda m: [(2,Silver())])
   , ([CampFire], [[Sphalerite]],     lambda m: [(2,Zinc())])
-  , ([CampFire], [[Tetrahedrite]],   lambda m: [(2,Copper(),(1,Silver()))])
+  , ([CampFire], [[Tetrahedrite]],   lambda m: [(2,Copper()),(1,Silver())])
 
   , ([CampFire], [[Copper,Tin]],     lambda m: [(2,Bronze())])
   , ([CampFire], [[Silver,Gold]],    lambda m: [(2,Electrum())])
