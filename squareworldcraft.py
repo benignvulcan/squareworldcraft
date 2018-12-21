@@ -202,6 +202,7 @@ class Thing:
 
   def isTraversable(self): return False
   def WouldHarvestUsing(self, tool): return (0,None)
+  def IsWorkstation(self): return False
 
   def UseDuration(self):
     'Time (in ms) it takes to use/swing this tool once'
@@ -381,6 +382,7 @@ class Hammer(Tool, OfMaterial): pass
 
 class CampFire(FlyweightThing):
   color_hsv = (20,100,100)
+  def IsWorkstation(self): return True
 class Table(FlyweightThing):
   def GetColor(self): return (204,150,86)
 
@@ -1124,7 +1126,7 @@ class CatalystsPanel(Window):
     for y in (-1,0,1):
       for x in (-1,0,1):
         (numthings, something) = self.world.things[pp[1]+y][pp[0]+x]
-        if numthings and something:
+        if numthings and something and something.IsWorkstation():
           self.catalystThings.append(something)
 
   def OnRender(self, surf):
