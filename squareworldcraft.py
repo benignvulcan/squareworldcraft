@@ -359,9 +359,10 @@ class Tool(Thing): pass
 class Component(Thing): pass
 class Hands(Tool):
   'Dummy tool for when no tool is used'
-class Pickaxe(Tool): pass
+class Pickaxe(Tool, OfMaterial): pass
 class Woodaxe(Tool, OfMaterial): pass
 class AxeHead(Component, OfMaterial): pass
+class PickaxeHead(Component, OfMaterial): pass
 class Hammer(Tool, OfMaterial): pass
 
 # TODO:
@@ -1262,6 +1263,7 @@ crafting_productions = \
   [ ([], [[Stone],[Stone]],         lambda m: [(1,AxeHead(Stone()))])
   , ([], [[Stone],[Wood]],          lambda m: [(1,Hammer(m[0][0]))])
   , ([], [[AxeHead],[Wood]],        lambda m: [(1,Woodaxe(m[0][0].Material()))])
+  , ([], [[PickaxeHead],[Wood]],    lambda m: [(1,Pickaxe(m[0][0].Material()))])
   , ([], [[Wood,Wood],[Wood,Wood]], lambda m: [(1,CampFire())])
 
   , ([CampFire], [[Bismuthinite]],   lambda m: [(2,Bismuth())])
@@ -1281,6 +1283,8 @@ crafting_productions = \
 
   , ([CampFire], [[Copper,Tin]],     lambda m: [(2,Bronze())])
   , ([CampFire], [[Silver,Gold]],    lambda m: [(2,Electrum())])
+
+  , ([CampFire], [[Metal],[Metal]],  lambda m: ( [], [(1,PickaxeHead(m[0][0]))] )[ m[0][0] == m[1][0] ])
   ]
 
 def TrimMatrix(matrix):
@@ -1368,9 +1372,13 @@ class CraftingWnd(Window):
     if found:
       #print('Pattern match: {} -> {}'.format(pattern,result))
       #self.outputSlot.SetProduct(self.consumables, fresult(self.matrix))
-      self.productsWnd.SetProducts(self.consumables, fresults(self.matrix) )
-      self.UpdateOutputEnabled()
-    else:
+      resultList = fresults(self.matrix)
+      if resultList:
+        self.productsWnd.SetProducts(self.consumables, resultList)
+        self.UpdateOutputEnabled()
+      else:
+        found = False
+    if not found:
       #self.outputSlot.SetProduct(None, None)
       self.productsWnd.SetProducts([], [])
 
