@@ -147,8 +147,10 @@ class Thing:
   def __init__(self):
     pass
 
-  def Name(self):
-    return self.__class__.__name__
+  def BaseIconName(self):
+    return self.__class__.__name__  # name used to match the filename of the icon image ("Pickaxe")
+  def DisplayName(self):
+    return self.__class__.__name__  # "Steel Pickaxe", "Water"
 
   color_rgb = (255,0,255)
   color_hsv = (300,100,100)
@@ -172,17 +174,17 @@ class Thing:
     # TODO:
     #  walk up the inheritance tree for names
     #  use fnmatch?
-    name = self.Name().lower()
-    for filename in glob.glob('icons/'+self.Name().lower()+'.png'):
+    name = self.BaseIconName()
+    if name in Thing.icon_cache:
+      return Thing.icon_cache[name]
+    for filename in glob.glob('icons/'+name.lower()+'.png'):
       icon = pygame.image.load(filename)
-      key = (name, icon.get_size())
-      #print(key)
-      Thing.icon_cache[key] = icon
+      Thing.icon_cache[name] = icon
       return icon
     return None
 
   def GetIcon(self, size=(64,64)):
-    key = (self.Name().lower(), (size[0],size[1]))
+    key = (self, (size[0],size[1]))
     if size[0] < 1 or size[1] < 1:
       key = (None, (0,0))  # all zero-size surfaces are alike
     if not key in Thing.icon_cache:
@@ -264,8 +266,8 @@ class Situatable(FlyweightThing):
     super().__init__(*posargs, **kwargs)
     self._inSitu = inSitu
   def InSitu(self): return self._inSitu
-  def Name(self):
-    name = super().Name()
+  def BaseIconName(self):
+    name = super().BaseIconName()
     if self._inSitu:
       name += 'Situ'
     return name
@@ -297,10 +299,14 @@ assert Stone(inSitu=True) is Stone(inSitu=True)
 assert Stone() != Stone(inSitu=True)
 assert Stone(inSitu=False) != Stone(inSitu=True)
 assert Stone(inSitu=False) != Stone()
-print(Stone().Name(), Stone(inSitu=True).Name(), Stone(inSitu=False).Name())
-assert Stone().Name() == 'Stone'
-assert Stone(inSitu=True).Name() == 'StoneSitu'
-assert Stone(inSitu=False).Name() == 'Stone'
+print(Stone().DisplayName(), Stone(inSitu=True).DisplayName(), Stone(inSitu=False).DisplayName())
+assert Stone().DisplayName() == 'Stone'
+assert Stone(inSitu=True).DisplayName() == 'Stone'
+assert Stone(inSitu=False).DisplayName() == 'Stone'
+print(Stone().BaseIconName(), Stone(inSitu=True).BaseIconName(), Stone(inSitu=False).BaseIconName())
+assert Stone().BaseIconName() == 'Stone'
+assert Stone(inSitu=True).BaseIconName() == 'StoneSitu'
+assert Stone(inSitu=False).BaseIconName() == 'Stone'
 
 class Cassiterite(Ore): pass
 class Tin(Metal): pass
@@ -352,8 +358,8 @@ class OfMaterial(Thing):
     self._material = material
   def Material(self): return self._material
   def GetColor(self): return self._material.GetColor()
-  #def Name(self):
-  #  return '{} {}'.format(self._material.Name, super().Name())
+  def DisplayName(self):
+    return '{} {}'.format(self._material.DisplayName(), super().DisplayName())
 
 class Tool(Thing): pass
 class Component(Thing): pass
@@ -519,7 +525,7 @@ class Player(Observable):
     idx = self.FindInventorySpace(some_thing, idx)
     if not idx is None:
       self.inventory[idx] = [self.inventory[idx][0]+some_thing[0], some_thing[1]]
-      print("Got {} {}".format(some_thing[0], some_thing[1].Name()))
+      print("Got {} {}".format(some_thing[0], some_thing[1].DisplayName()))
       self.Changed()
       return idx
     return None
@@ -540,7 +546,7 @@ class Player(Observable):
         removed += count
         if self.inventory[i][0] == 0:
           self.inventory[i][1] = None
-        print("Dropped {} {}".format(count, some_thing[1].Name()))
+        print("Dropped {} {}".format(count, some_thing[1].DisplayName()))
         if some_thing[0] == 0:
           break
     if removed:
@@ -563,7 +569,7 @@ class Player(Observable):
     if numthing and not thing is None and size>=0:
       MARGIN = 2
       img = pygame.Surface( (size,size), pygame.SRCALPHA)
-      nameLabel = manager.GetFont('LABEL').render(thing.Name(), True, (0,0,0))
+      nameLabel = manager.GetFont('LABEL').render(thing.DisplayName(), True, (0,0,0))
       img.blit(nameLabel, (MARGIN,size-MARGIN-nameLabel.get_height()))
       z = size - nameLabel.get_height() - MARGIN*2
       thingImg = thing.GetIcon( (z,z) )
