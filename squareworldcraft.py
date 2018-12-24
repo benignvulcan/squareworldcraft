@@ -151,6 +151,8 @@ class Thing:
     return self.__class__.__name__  # name used to match the filename of the icon image ("Pickaxe")
   def DisplayName(self):
     return self.__class__.__name__  # "Steel Pickaxe", "Water"
+  def SymbolName(self):
+    return ''                       # short chemical symbol string ("Cu" or "H₂O"), if desired
 
   color_rgb = (255,0,255)
   color_hsv = (300,100,100)
@@ -199,6 +201,17 @@ class Thing:
         img.blit(scaledSrcIcon, (DROPSHADOW,DROPSHADOW))
         scaledSrcIcon.fill( self.GetColor(), special_flags=pygame.BLEND_MAX )
         img.blit(scaledSrcIcon, (0,0))
+        if self.SymbolName():
+          txt_img = pygame.font.SysFont('freemono', size[1]//2, bold=True).render(self.SymbolName(), True, (0,0,0))
+          sym_img = pygame.Surface( (txt_img.get_width()+4, txt_img.get_height()+4), pygame.SRCALPHA )
+          sym_img.blit(txt_img, ( 0, 2))
+          sym_img.blit(txt_img, ( 4, 2))
+          sym_img.blit(txt_img, ( 2, 0))
+          sym_img.blit(txt_img, ( 2, 4))
+          txt_img.fill( (255,255,255), special_flags=pygame.BLEND_MAX )
+          sym_img.blit(txt_img, ( 2, 2))
+          sym_img.fill( (255,255,255,127), None, pygame.BLEND_RGBA_MULT)
+          img.blit(sym_img, (img.get_width()//2-sym_img.get_width()//2, img.get_height()//2-sym_img.get_height()//2))
       Thing.icon_cache[key] = img
     return Thing.icon_cache[key]
 
@@ -282,7 +295,9 @@ class Harvestable(Situatable):
 class PickUpAble(Harvestable): pass
 class Rock(Harvestable): pass
 class Ore(Harvestable): pass
-class Metal(PickUpAble): pass
+class Metal(PickUpAble):
+  _symbolName = ''
+  def SymbolName(self): return self._symbolName
 class Alloy(Metal): pass
 class Gem(Harvestable): pass
 class Plant(Harvestable):
@@ -309,31 +324,40 @@ assert Stone(inSitu=True).BaseIconName() == 'StoneSitu'
 assert Stone(inSitu=False).BaseIconName() == 'Stone'
 
 class Cassiterite(Ore): pass
-class Tin(Metal): pass
+class Tin(Metal):
+  _symbolName = 'Sn'
 
 class Malachite(Ore): pass
-class Copper(Metal): pass
+class Copper(Metal):
+  _symbolName = 'Cu'
 
 class NativeSilver(Ore): pass
-class Silver(Metal): pass
+class Silver(Metal):
+  _symbolName = 'Ag'
 
 class NativeGold(Ore): pass
-class Gold(Metal): pass
+class Gold(Metal):
+  _symbolName = 'Au'
 
 class NativeAluminum(Ore): pass
-class Aluminum(Metal): pass
+class Aluminum(Metal):
+  _symbolName = 'Al'
 
 class Bismuthinite(Ore): pass
-class Bismuth(Metal): pass
+class Bismuth(Metal):
+  _symbolName = 'Bi'
 
 class Garnierite(Ore): pass
-class Nickel(Metal): pass
+class Nickel(Metal):
+  _symbolName = 'Bi'
 
 class NativePlatinum(Ore): pass
-class Platinum(Metal): pass
+class Platinum(Metal):
+  _symbolName = 'Pt'
 
 class Sphalerite(Ore): pass
-class Zinc(Metal): pass
+class Zinc(Metal):
+  _symbolName = 'Zn'
 class Tetrahedrite(Ore): pass
 class Brass(Alloy): pass  # copper + zinc; often 2/3 copper + 1/3 zinc
 class Bronze(Alloy): pass # modern standard bronze is 88% copper + 12% tin
@@ -344,9 +368,11 @@ class Diamond(Gem): pass
 class Hematite(Ore): pass
 class Limonite(Ore): pass
 class Magnetite(Ore): pass
-class Iron(Metal): pass
+class Iron(Metal):
+  _symbolName = 'Fe'
 class Galena(Ore): pass
-class Lead(Metal): pass
+class Lead(Metal):
+  _symbolName = 'Pb'
 
 class Wood(Plant): pass
 class Vine(Plant):
@@ -464,8 +490,9 @@ class Player(Observable):
     self.world = world
     self.pos = [initialpos[0], initialpos[1]]
     self.inventory = [ [0,None] for i in range(40) ]
-    #self.inventory[0] = [1, Woodaxe()]
-    #self.inventory[1] = [1, Pickaxe()]
+    self.inventory[0] = [1, Woodaxe(Stone())]
+    self.inventory[1] = [1, Pickaxe(Iron())]
+    self.inventory[3] = [1, CampFire()]
     self.inventory_selection = 0  # first item
     self.walkingTimeout = 0  # Time to wait until next walking can be performed
     self.walkingQueue = []   # Direction(s) to try to walk in - most recent first
