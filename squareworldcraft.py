@@ -622,7 +622,7 @@ class Player(Observable):
     if newpos[0] < 0 or newpos[1] < 0 or newpos[0] >= self.world.sz[0] or newpos[1] >= self.world.sz[1]:
       return False
     terrain = self.world.ground[newpos[1]][newpos[0]]
-    numthing, thing = self.world.things[newpos[1]][newpos[0]]
+    numthing, thing = self.world.ThingsAt(newpos)
     if terrain.isTraversable() and (numthing==0 or thing is None or thing.isTraversable()):
       return True
     return False
@@ -643,7 +643,7 @@ class Player(Observable):
   def WouldHarvestAt(self, hitpos):
     numtool, tool = self.SelectedInventory()
     if ChessboardDistance(hitpos, self.pos) <= 1:
-      numtarget, target = self.world.things[hitpos[1]][hitpos[0]]
+      numtarget, target = self.world.ThingsAt(hitpos)
       if numtarget:
         (n,t) = target.WouldHarvestUsing(tool)
         return (n*numtarget, t)
@@ -652,7 +652,7 @@ class Player(Observable):
   def UsePrimaryAt(self, hitpos):
     numthing, thing = self.WouldHarvestAt(hitpos)
     if numthing and not thing is None:
-      self.world.things[hitpos[1]][hitpos[0]] = (0,None)
+      self.world.SetThingsAt(hitpos, (0,None))
       self.world.progress.pop(hitpos, None)
       self.Changed()
       self.world.Changed()
@@ -743,12 +743,12 @@ class Player(Observable):
             self.world.progress[self.wieldPos] = progress + j
             self.world.Changed()
       elif self.wieldType is Player.WIELD_MATERIAL and numheld and not held is None:
-        numtarget, target = self.world.things[self.wieldPos[1]][self.wieldPos[0]]
+        numtarget, target = self.world.ThingsAt(self.wieldPos)
         if numtarget == 0 and numheld and ChessboardDistance(self.wieldPos, self.pos) == 1:
           if isinstance(held, (Wood, Stone, Vine, CampFire, Malachite, NativeSilver, NativeGold, Copper, Silver, Gold)):
             (numremoved, removed) = self.RemoveInventory( (1,held), self.inventory_selection )
             if numremoved:
-              self.world.things[self.wieldPos[1]][self.wieldPos[0]] = (numremoved, removed)
+              self.world.SetThingsAt(self.wieldPos, (numremoved, removed))
               self.world.Changed()
 
   def Update(self, dt):
@@ -767,6 +767,7 @@ class World(Observable):
     #self.ground = [ row_prototype[:] for c in range(self.sz[0]) ]
     self.ground = [ [ grass_flyweight for r in range(self.sz[1]) ] for c in range(self.sz[0]) ]
     #self.ground = np.random.randint(0,4,self.sz)
+    self.lighting = [ [True]*self.sz[0] for r in range(self.sz[1]) ]
     self.things = [ [ (0,None) for r in range(self.sz[1]) ] for c in range(self.sz[0]) ]
     self.progress = {}  # map from (x,y) to milliseconds remaining to finish choping/pickaxing/harvesting Thing
     self.player = Player(self)
@@ -793,7 +794,8 @@ class World(Observable):
         height = random.randrange(12,64)
         top = random.randrange(self.sz[1] - height)
         left = random.randrange(self.sz[0] - width)
-        self.GroundFill(pygame.Rect(left, top, width, height), value)
+        r = pygame.Rect(left, top, width, height)
+        self.GroundFill(r, value)
         p += 70/(2*plots)
         progressCallback(int(p))
 
@@ -817,6 +819,7 @@ class World(Observable):
       left = random.randrange(self.sz[0] - width)
       r = pygame.Rect(left, top, width, height)
       self.ThingFill(r, (1, Stone(inSitu=True)))
+      self.LightFill(r.inflate(-2,-2), False)
       ores = list(ore for ore, count in 
         { Bismuthinite : 3
         , Cassiterite : 2
@@ -862,6 +865,12 @@ class World(Observable):
         self.ground[r.top+row][r.left+col] = value
     self.Changed()
 
+  def LightFill(self, r, value):
+    for row in range(r.height):
+      for col in range(r.width):
+        self.lighting[r.top+row][r.left+col] = value
+    self.Changed()
+
   def ThingFill(self, r, value):
     for row in range(r.height):
       for col in range(r.width):
@@ -874,6 +883,16 @@ class World(Observable):
   def CollidePoint(self, p):
     'Is cell at coordinate p in the world?  (Or does it fall off the edge?)'
     return not( p[0] < 0 or p[1] < 0 or p[0] >= self.sz[0] or p[1] >= self.sz[1] )
+
+  def ThingsAt(self, p):
+    return self.things[p[1]][p[0]]
+  def SetThingsAt(self, p, something):
+    self.things[p[1]][p[0]] = something
+    self.ExposeToLight(p)
+  def ExposeToLight(self, p):
+    for dy in (-1,0,1):
+      for dx in (-1,0,1):
+        self.lighting[p[1]+dy][p[0]+dx] = True
 
 def sinInterp(value, inLo, inHi, outLo, outHi):
   # TODO: replace with a table of additive color values
@@ -925,10 +944,12 @@ class WorldWnd(Window):
           #pygame.draw.rect(surf, (0,127-row%8*8,255-col%8*8), r)
           #pygame.draw.rect(surf, (0, 255-(int(math.sin(math.radians(45*(row%8)))*8)+8), 255-col%8*8), r)
           pygame.draw.rect(surf, (0, sinInterp(row%8,0,8,255-8,255), sinInterp(col%8,0,8,255-8,255)), r)
+        elif not self.world.lighting[row][col]:
+          pygame.draw.rect(surf, (0,0,0), r)
         else:
           terrain = self.world.ground[row][col]
           pygame.draw.rect(surf, terrain.GetColor(), r)
-          numthing, thing = self.world.things[row][col]
+          numthing, thing = self.world.ThingsAt((col,row))
           if numthing and not thing is None:
             icon = thing.GetIcon( (self.tilesize,self.tilesize) )
             surf.blit(icon, r)
@@ -1179,7 +1200,7 @@ class CatalystsPanel(Window):
     pp = self.world.player.pos
     for y in (-1,0,1):
       for x in (-1,0,1):
-        (numthings, something) = self.world.things[pp[1]+y][pp[0]+x]
+        (numthings, something) = self.world.ThingsAt((pp[0]+x,pp[1]+y))
         if numthings and something and something.IsWorkstation():
           self.catalystThings.append(something)
 
