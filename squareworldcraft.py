@@ -287,10 +287,14 @@ class Situatable(FlyweightThing):
 
 class Harvestable(Situatable):
   def WouldHarvestUsing(self, tool):
-    if (self._inSitu and isinstance(tool, (Hammer, Pickaxe))) or not self._inSitu:
-      return (1, self.__class__())
-    else:
-      return (0,None)
+    something = (1, self.__class__())
+    nothing = (0, None)
+    if not self._inSitu:
+      return something
+    if isinstance(tool, (Hammer, Pickaxe)):
+      if tool.HarvestingMagnitude() >= self.hardness:
+        return something
+    return nothing
 
 class PickUpAble(Harvestable): pass
 class Rock(Harvestable): pass
@@ -349,7 +353,7 @@ class Bismuth(Metal):
 
 class Garnierite(Ore): pass
 class Nickel(Metal):
-  _symbolName = 'Bi'
+  _symbolName = 'Ni'
 
 class NativePlatinum(Ore): pass
 class Platinum(Metal):
@@ -391,11 +395,15 @@ class Tool(Thing): pass
 class Component(Thing): pass
 class Hands(Tool):
   'Dummy tool for when no tool is used'
-class Pickaxe(Tool, OfMaterial): pass
+class Pickaxe(Tool, OfMaterial):
+  def HarvestingMagnitude(self):
+    return self._material.hardness + .5
 class Woodaxe(Tool, OfMaterial): pass
 class AxeHead(Component, OfMaterial): pass
 class PickaxeHead(Component, OfMaterial): pass
-class Hammer(Tool, OfMaterial): pass
+class Hammer(Tool, OfMaterial):
+  def HarvestingMagnitude(self):
+    return self._material.hardness
 
 # TODO:
 #   Stones -> Stone Furnace (higher temperature than CampFire)
