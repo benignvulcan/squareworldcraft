@@ -472,6 +472,66 @@ def LoadMaterialsProperties():
         print('{}.{} = {}'.format(klassname, attr, value))
         setattr(klass, attr, value)
 
+CARDINAL_DIRECTIONS = ( (0,-1), (1,0), (0,1), (-1,0) )
+
+class AnimateThing(Observable, Thing):
+  color_hsv = (0,100,100)
+  def __init__(self, world, initialpos, *posargs, **kwargs):
+    super().__init__(*posargs, **kwargs)
+    self.world = world
+    self.pos = [initialpos[0], initialpos[1]]
+    self.energy = 1000
+    self.Changed()
+
+  def Changed(self, changed=True):
+    self.changed = changed
+    if changed:
+      self.NotifyChange()
+
+  def CanOccupy(self, newpos):
+    'Return True if self can be at the given position.'
+    if newpos[0] < 0 or newpos[1] < 0 or newpos[0] >= self.world.sz[0] or newpos[1] >= self.world.sz[1]:
+      return False
+    terrain = self.world.ground[newpos[1]][newpos[0]]
+    numthing, thing = self.world.ThingsAt(newpos)
+    if terrain.isTraversable() and (numthing==0 or thing is None or thing.isTraversable()):
+      return True
+    return False
+
+  def MoveTo(self, newpos):
+    'Unconditionally move self to newpos - assumes CanOccupy() was already consulted.'
+    self.pos[0] = newpos[0]
+    self.pos[1] = newpos[1]
+    self.Changed()
+
+  def Update(self, dt):
+    pass
+
+class Animal(AnimateThing):
+  def __init__(self, *posargs, **kwargs):
+    super().__init__(*posargs, **kwargs)
+    self.walkingTimeout = 0  # Time to wait until next walking can be performed
+
+class Herbivore(Animal):
+  color_hsv = (60,75,50)
+
+  def UpdateWalking(self, dt):
+    self.walkingTimeout -= dt
+    if self.walkingTimeout < 0:
+      self.walkingTimeout = 0
+    if self.walkingTimeout <= 0:
+      choices = []
+      for d in CARDINAL_DIRECTIONS:
+        pt = [self.pos[0]+d[0], self.pos[1]+d[1]]
+        if self.CanOccupy(pt):
+          choices.append(pt)
+      if choices:
+        self.MoveTo(random.choice(choices))
+        self.walkingTimeout += SECOND//2 * random.randint(1,8)
+
+  def Update(self, dt):
+    self.UpdateWalking(dt)
+
 keyToWalkDirection = \
   { pygame.K_LEFT  : (-1, 0)
   , pygame.K_KP4   : (-1, 0)
@@ -494,15 +554,15 @@ keyToActDirection = \
   , pygame.K_l : ( 1, 0)
   }
 
-class Player(Observable):
+class Player(AnimateThing):
 
   WIELD_TOOL = 1
   WIELD_MATERIAL = 2
 
   def __init__(self, world, initialpos=(10,10), **kwargs):
-    super().__init__(**kwargs)
-    self.world = world
-    self.pos = [initialpos[0], initialpos[1]]
+    super().__init__(world, initialpos, **kwargs)
+    #self.world = world
+    #self.pos = [initialpos[0], initialpos[1]]
     self.inventory = [ [0,None] for i in range(40) ]
     self.inventory[0] = [1, Woodaxe(Stone())]
     self.inventory[1] = [1, Pickaxe(Iron())]
@@ -516,11 +576,6 @@ class Player(Observable):
     self.Changed()
 
   def PowerProduction(self): return 100  # in watts (a.k.a. joules/sec)
-
-  def Changed(self, changed=True):
-    self.changed = changed
-    if changed:
-      self.NotifyChange()
 
   def SelectInventory(self, idx):
     self.inventory_selection = idx
@@ -623,25 +678,13 @@ class Player(Observable):
       return img
     return None
 
-  def CanOccupy(self, newpos):
-    'Return True if player can be at the given position.'
-    if newpos[0] < 0 or newpos[1] < 0 or newpos[0] >= self.world.sz[0] or newpos[1] >= self.world.sz[1]:
-      return False
-    terrain = self.world.ground[newpos[1]][newpos[0]]
-    numthing, thing = self.world.ThingsAt(newpos)
-    if terrain.isTraversable() and (numthing==0 or thing is None or thing.isTraversable()):
-      return True
-    return False
-
   def MoveTo(self, newpos):
     'Unconditionally move player to newpos - assumes CanOccupy() was already consulted.'
     if not self.wieldPos is None:
       self.wieldPos = ( self.wieldPos[0] + newpos[0] - self.pos[0]
                       , self.wieldPos[1] + newpos[1] - self.pos[1] )
-    self.pos[0] = newpos[0]
-    self.pos[1] = newpos[1]
+    super().MoveTo(newpos)
     #print('player pos = {}'.format(self.pos))
-    self.Changed()
 
   def CanUseAt(self, tool, hitpos):
     pass
@@ -776,6 +819,7 @@ class World(Observable):
     self.lighting = [ [True]*self.sz[0] for r in range(self.sz[1]) ]
     self.things = [ [ (0,None) for r in range(self.sz[1]) ] for c in range(self.sz[0]) ]
     self.progress = {}  # map from (x,y) to milliseconds remaining to finish choping/pickaxing/harvesting Thing
+    self.animals = {}   # map from (x,y) to list of animals
     self.player = Player(self)
     self.icons = {}
     print('{:,} cells'.format(self.sz[0]*self.sz[1]))
@@ -789,6 +833,7 @@ class World(Observable):
     progressCallback(80)
     self.GenerateClay()
     self.GenerateRock()
+    self.GenerateAnimals()
     progressCallback(90)
 
   def GenerateTerrain(self, progressCallback):
@@ -870,6 +915,18 @@ class World(Observable):
     for p in points:
       self.things[p[1]][p[0]] = value
 
+  def GenerateAnimals(self):
+    for i in range(800):
+      p = ( random.randrange(self.sz[0]), random.randrange(self.sz[1]) )
+      numthing, thing = self.things[p[1]][p[0]]
+      if numthing and not thing is None:
+        if not thing.isTraversable():
+          continue
+      a = Herbivore(self,p)
+      self.animals.setdefault(p, []).append(a)
+      a.Subscribe(CHANGE, self.OnChange)
+    print('{} animals created'.format(len(self.animals)))
+
   def Changed(self, changed=True):
     self.changed = changed
     if self.changed:
@@ -898,6 +955,13 @@ class World(Observable):
 
   def Update(self, dt):
     self.player.Update(dt)
+    for p in tuple(self.animals.keys()):
+      for a in tuple(self.animals[p]):
+        self.animals[p].remove(a)
+        a.Update(dt)
+        self.animals.setdefault(tuple(a.pos),[]).append(a)
+      if not self.animals[p]:
+        del self.animals[p]
 
   def CollidePoint(self, p):
     'Is cell at coordinate p in the world?  (Or does it fall off the edge?)'
@@ -984,6 +1048,11 @@ class WorldWnd(Window):
             radius = self.tilesize * 2 // 6
             if not self.world.player.throb is None:
               radius += int( (self.tilesize // 6) * math.sin(math.radians(self.world.player.throb)) )
+            pygame.draw.circle(surf, c, r.center, radius)
+            pygame.draw.circle(surf, (0,0,0), r.center, radius, 1)
+          if (col,row) in self.world.animals:
+            c = (255,63,0)
+            radius = self.tilesize * 3 // 12
             pygame.draw.circle(surf, c, r.center, radius)
             pygame.draw.circle(surf, (0,0,0), r.center, radius, 1)
 
