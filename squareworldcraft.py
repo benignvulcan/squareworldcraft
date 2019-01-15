@@ -116,7 +116,7 @@ An Iconography
 
 '''
 
-import sys, enum, math, random, glob, csv
+import sys, enum, math, random, itertools, glob, csv
 
 #import numpy as np
 import pygame
@@ -136,6 +136,10 @@ manager = None
 def ceildiv(n, d):  # numerator or dividend, denominator or divisor
   'Integer division, but rounding up.'
   return (n + (d-1)) // d
+
+def ManhattanDistance(p, q):
+  "Return the distance between p and q if you can only move horizontally or vertically."
+  return abs(q[0]-p[0])+abs(q[1]-p[1])
 
 def ChessboardDistance(p, q):
   # A.K.A. Chebyshev distance.
@@ -511,26 +515,42 @@ class Animal(AnimateThing):
   def __init__(self, *posargs, **kwargs):
     super().__init__(*posargs, **kwargs)
     self.walkingTimeout = 0  # Time to wait until next walking can be performed
+    self.walkingDirection = (random.randrange(3)-1,random.randrange(3)-1)
+    self.speed = SECOND//2 * random.randint(1,8)
 
-class Herbivore(Animal):
-  color_hsv = (60,75,50)
+  def PickMove(self, points):
+    d = ManhattanDistance(self.pos, self.world.player.pos)
+    if d < 10:
+      pts2 = sorted( ((ManhattanDistance(p,self.world.player.pos),p) for p in points), reverse=True )
+      pts3 = itertools.takewhile(lambda t: t[0] == pts2[0][0], pts2)
+      if pts3:
+        points = tuple(t[1] for t in pts3)
+    pt = (self.pos[0]+self.walkingDirection[0], self.pos[1]+self.walkingDirection[1])
+    if not (pt in points and random.randrange(5)):
+      pt = random.choice(points)
+    return pt
 
   def UpdateWalking(self, dt):
     self.walkingTimeout -= dt
     if self.walkingTimeout < 0:
       self.walkingTimeout = 0
     if self.walkingTimeout <= 0:
-      choices = []
+      choices = [tuple(self.pos)]
       for d in CARDINAL_DIRECTIONS:
-        pt = [self.pos[0]+d[0], self.pos[1]+d[1]]
+        pt = (self.pos[0]+d[0], self.pos[1]+d[1])
         if self.CanOccupy(pt):
           choices.append(pt)
       if choices:
-        self.MoveTo(random.choice(choices))
-        self.walkingTimeout += SECOND//2 * random.randint(1,8)
+        pt = self.PickMove(choices)
+        self.walkingDirection = (pt[0]-self.pos[0], pt[1]-self.pos[1])
+        self.MoveTo(pt)
+        self.walkingTimeout += self.speed
 
   def Update(self, dt):
     self.UpdateWalking(dt)
+
+class Herbivore(Animal):
+  color_hsv = (90,100,50)
 
 keyToWalkDirection = \
   { pygame.K_LEFT  : (-1, 0)
@@ -1051,10 +1071,12 @@ class WorldWnd(Window):
             pygame.draw.circle(surf, c, r.center, radius)
             pygame.draw.circle(surf, (0,0,0), r.center, radius, 1)
           if (col,row) in self.world.animals:
-            c = (255,63,0)
-            radius = self.tilesize * 3 // 12
-            pygame.draw.circle(surf, c, r.center, radius)
-            pygame.draw.circle(surf, (0,0,0), r.center, radius, 1)
+            for a in self.world.animals[(col,row)]:
+              #c = (255,63,0)
+              c = a.GetColor()
+              radius = self.tilesize * 3 // 12
+              pygame.draw.circle(surf, c, r.center, radius)
+              pygame.draw.circle(surf, (0,0,0), r.center, radius, 1)
 
   def MouseToWorldPos(self, pos):
     world_col = pos[0] // self.tilesize + self.world_col_start
