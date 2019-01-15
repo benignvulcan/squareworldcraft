@@ -284,6 +284,7 @@ class Situatable(FlyweightThing):
     if self._inSitu:
       name += 'Situ'
     return name
+  def isTraversable(self): return not self._inSitu
 
 class Harvestable(Situatable):
   def WouldHarvestUsing(self, tool):
@@ -326,6 +327,9 @@ print(Stone().BaseIconName(), Stone(inSitu=True).BaseIconName(), Stone(inSitu=Fa
 assert Stone().BaseIconName() == 'Stone'
 assert Stone(inSitu=True).BaseIconName() == 'StoneSitu'
 assert Stone(inSitu=False).BaseIconName() == 'Stone'
+
+class Clay(Harvestable):
+  color_hsv = (20,50,40)
 
 class Cassiterite(Ore): pass
 class Tin(Metal):
@@ -379,6 +383,8 @@ class Lead(Metal):
   _symbolName = 'Pb'
 
 class Wood(Plant): pass
+class Grass(Plant):
+  def GetColor(self): return (0,127,0)
 class Vine(Plant):
   def GetColor(self): return (0, 191, 0)
 
@@ -781,6 +787,7 @@ class World(Observable):
     progressCallback(75)
     self.GenerateThings()
     progressCallback(80)
+    self.GenerateClay()
     self.GenerateRock()
     progressCallback(90)
 
@@ -807,9 +814,21 @@ class World(Observable):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Wood())
     for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Vine())
+    for i in range(count*100):
+      self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = (1,Grass())
     for i in range(count):
       self.things[random.randrange(self.sz[1])][random.randrange(self.sz[0])] = \
         (random.randrange(4)+random.randrange(3)+1, Wood(inSitu=True))
+
+  def GenerateClay(self):
+    for i in range(self.area // 50000):
+      width = random.randrange(12,64)
+      height = random.randrange(12,64)
+      top = random.randrange(self.sz[1] - height)
+      left = random.randrange(self.sz[0] - width)
+      r = pygame.Rect(left, top, width, height)
+      self.ThingFill(r, (1, Clay(inSitu=True)))
+      self.LightFill(r.inflate(-2,-2), False)
 
   def GenerateRock(self):
     for i in range(self.area // 5000):
