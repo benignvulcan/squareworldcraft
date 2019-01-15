@@ -484,7 +484,7 @@ class AnimateThing(Observable, Thing):
     super().__init__(*posargs, **kwargs)
     self.world = world
     self.pos = [initialpos[0], initialpos[1]]
-    self.energy = 1000
+    self.energy = 1000 * SECOND  # effectively "number of milliseconds of life remaining"
     self.Changed()
 
   def Changed(self, changed=True):
@@ -518,7 +518,7 @@ class Animal(AnimateThing):
     self.walkingDirection = (random.randrange(3)-1,random.randrange(3)-1)
     self.speed = SECOND//2 * random.randint(1,8)
 
-  def PickMove(self, points):
+  def PickWalk(self, points):
     d = ManhattanDistance(self.pos, self.world.player.pos)
     if d < 10:
       pts2 = sorted( ((ManhattanDistance(p,self.world.player.pos),p) for p in points), reverse=True )
@@ -531,6 +531,7 @@ class Animal(AnimateThing):
     return pt
 
   def UpdateWalking(self, dt):
+    self.energy -= dt
     self.walkingTimeout -= dt
     if self.walkingTimeout < 0:
       self.walkingTimeout = 0
@@ -541,7 +542,7 @@ class Animal(AnimateThing):
         if self.CanOccupy(pt):
           choices.append(pt)
       if choices:
-        pt = self.PickMove(choices)
+        pt = self.PickWalk(choices)
         self.walkingDirection = (pt[0]-self.pos[0], pt[1]-self.pos[1])
         self.MoveTo(pt)
         self.walkingTimeout += self.speed
@@ -551,6 +552,13 @@ class Animal(AnimateThing):
 
 class Herbivore(Animal):
   color_hsv = (90,100,50)
+
+  def PickWalk(self, points):
+    numthing, thing = self.world.ThingsAt(self.pos)
+    if numthing and isinstance(thing, (Grass,Vine)):
+      self.world.SetThingsAt(self.pos, (0,None))
+      self.energy += 10 * SECOND
+    return super().PickWalk(points)
 
 keyToWalkDirection = \
   { pygame.K_LEFT  : (-1, 0)
@@ -982,6 +990,15 @@ class World(Observable):
         self.animals.setdefault(tuple(a.pos),[]).append(a)
       if not self.animals[p]:
         del self.animals[p]
+    self.GrowPlants(dt)
+
+  def GrowPlants(self, dt):
+    if random.randrange(SECOND//2) < dt: # about once per second//2
+      p = (random.randrange(self.sz[1]), random.randrange(self.sz[0]))
+      numthing, thing = self.things[p[1]][p[0]]
+      if numthing == 0 and thing is None:
+        self.things[p[1]][p[0]] = (1,Grass())
+        print('new grass at {}'.format(p))
 
   def CollidePoint(self, p):
     'Is cell at coordinate p in the world?  (Or does it fall off the edge?)'
@@ -995,7 +1012,9 @@ class World(Observable):
   def ExposeToLight(self, p):
     for dy in (-1,0,1):
       for dx in (-1,0,1):
-        self.lighting[p[1]+dy][p[0]+dx] = True
+        q = (p[0]+dx, p[1]+dy)
+        if self.CollidePoint(q):
+          self.lighting[q[1]][q[0]] = True
 
 def sinInterp(value, inLo, inHi, outLo, outHi):
   # TODO: replace with a table of additive color values
