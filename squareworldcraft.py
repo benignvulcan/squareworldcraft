@@ -9,7 +9,6 @@ TODO:
     - Customized Things?  Certainly some, if crafting is my point.
     - Possibility for procedurally generated things?
   * Add more ores, lots more types of everything
-  * Hide rock area interior until exposed
   * Add critters/creatures
   * More procedural map generation
   * (Re)consider using numpy to enable larger/faster maps
@@ -231,7 +230,7 @@ class Thing:
   def PowerEfficiency(self):
     'For a given power input (such as 100 W), what percent produces useful work with this tool?'
     return 10  # percentage
-    # Active humans need about 2400 to 3000 food caloires (=8,368,000 to 12,552,000 joules) per day.
+    # Active humans need about 2400 to 3000 food calories (=8,368,000 to 12,552,000 joules) per day.
     # Humans (who consume 2000 food calories) expend around 100 W on average (record is around 430 W).
     # Human work efficiency is around 25%
   def EnergyToHarvest(self):
