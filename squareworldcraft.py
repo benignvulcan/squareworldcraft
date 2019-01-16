@@ -290,10 +290,15 @@ class Situatable(FlyweightThing):
       name += 'Situ'
     return name
   def isTraversable(self): return not self._inSitu
+  def EnergyToHarvest(self):
+    if self._inSitu:
+      return 500
+    else:
+      return 10
 
 class Harvestable(Situatable):
   def WouldHarvestUsing(self, tool):
-    something = (1, self.__class__())
+    something = (1, self.__class__())   # this is not the thing that is there, this is the thing it would become!
     nothing = (0, None)
     if not self._inSitu:
       return something
@@ -409,7 +414,10 @@ class Hands(Tool):
 class Pickaxe(Tool, OfMaterial):
   def HarvestingMagnitude(self):
     return self._material.hardness + .5
-class Woodaxe(Tool, OfMaterial): pass
+  def PowerEfficiency(self):
+    return max(10, self._material.hardness * 8)
+class Woodaxe(Tool, OfMaterial):
+  pass
 class AxeHead(Component, OfMaterial): pass
 class PickaxeHead(Component, OfMaterial): pass
 class Hammer(Tool, OfMaterial):
@@ -826,15 +834,17 @@ class Player(AnimateThing):
     if not self.wieldPos is None:
       numheld, held = self.SelectedInventory()
       if self.wieldType is Player.WIELD_TOOL:
-        numthing, thing = self.WouldHarvestAt(self.wieldPos)
-        if numthing and not thing is None:
+        wouldNumThing, wouldThing = self.WouldHarvestAt(self.wieldPos)
+        if wouldNumThing and not wouldThing is None:
           progress = self.world.progress.get(self.wieldPos, 0)
+          numThing, thing = self.world.ThingsAt(self.wieldPos)
+          BUGPRINT('{} progress out of {} EnergyToHarvest', progress, thing.EnergyToHarvest())
           if progress >= thing.EnergyToHarvest():
             self.UsePrimaryAt(self.wieldPos)
           else:
             if held is None:
               held = Hands()
-            j = dt * held.PowerEfficiency() // 10
+            j = dt * held.PowerEfficiency() // 100
             self.world.progress[self.wieldPos] = progress + j
             self.world.Changed()
       elif self.wieldType is Player.WIELD_MATERIAL and numheld and not held is None:
@@ -1345,7 +1355,7 @@ class CatalystsPanel(Window):
     super().OnChange(evt)
 
   def Rescan(self):
-    BUGPRINT('CatalystsPanel.Rescan()')
+    #BUGPRINT('CatalystsPanel.Rescan()')
     self.catalystThings = []
     pp = self.world.player.pos
     for y in (-1,0,1):
@@ -1455,7 +1465,7 @@ class ProductsPanel(Window):
   def SetProducts(self, consumables, somethings):
     self._consumables = consumables
     self._productSomeThings = somethings
-    BUGPRINT("productSomeThings = {}", somethings)
+    #BUGPRINT("productSomeThings = {}", somethings)
     self.Dirty()
   def GetProducts(self):
     return self._productSomeThings[:]
@@ -1742,6 +1752,7 @@ class Application:
       self.world.player.AddInventory( (1, Woodaxe(Stone())) )
       self.world.player.AddInventory( (1, Pickaxe(Iron())) )
       self.world.player.AddInventory( (3, CampFire()) )
+      self.world.player.AddInventory( (1, Pickaxe(Diamond())) )
       self.world.player.walkingSpeed = SECOND//30
 
     print("Ready.")
