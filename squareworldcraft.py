@@ -115,7 +115,7 @@ An Iconography
 
 '''
 
-import sys, enum, math, random, itertools, glob, csv
+import sys, enum, math, random, itertools, glob, csv, argparse
 
 #import numpy as np
 import pygame
@@ -123,12 +123,12 @@ import pygame
 import windowing
 from windowing import *
 
-DEBUG = False
+_DEBUG = False
 def IFDEBUG(value):
-  if DEBUG: return value
+  if _DEBUG: return value
   else: return None
 def BUGPRINT(fmtstr, *posargs, **kwargs):
-  if DEBUG: print(fmtstr.format(*posargs, **kwargs))
+  if _DEBUG: print(fmtstr.format(*posargs, **kwargs))
 
 SECOND = 1000  # conversion factor from seconds to standard units (miliseconds)
 
@@ -612,10 +612,8 @@ class Player(AnimateThing):
     #self.world = world
     #self.pos = [initialpos[0], initialpos[1]]
     self.inventory = [ [0,None] for i in range(40) ]
-    self.inventory[0] = [1, Woodaxe(Stone())]
-    self.inventory[1] = [1, Pickaxe(Iron())]
-    self.inventory[3] = [1, CampFire()]
     self.inventory_selection = 0  # first item
+    self.walkingSpeed = SECOND//6
     self.walkingTimeout = 0  # Time to wait until next walking can be performed
     self.walkingQueue = []   # Direction(s) to try to walk in - most recent first
     self.wieldType = None
@@ -811,7 +809,7 @@ class Player(AnimateThing):
         newpos = [self.pos[0]+direction[0], self.pos[1]+direction[1]]
         if self.CanOccupy(newpos):
           self.MoveTo(newpos)
-          self.walkingTimeout += SECOND//30
+          self.walkingTimeout += self.walkingSpeed
           moved = True
           break
       #if not moved and len(self.walkingQueue) == 1:
@@ -1688,106 +1686,131 @@ def ChooseVideoMode(margin=(96,96)):
         return m
   return (0,0)
 
-def main(argv):
-  print("Initializing...")
+class Application:
 
-  global manager
-  manager = WindowManager(text='manager')
+  def __init__(self, argv):
+    self.ParseArgs(argv)
+    self.InitApp()
 
-  #screen = pygame.display.set_mode((1536,800))
-  screen = pygame.display.set_mode(ChooseVideoMode(), pygame.RESIZABLE)
+  def ParseArgs(self, argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--debug', action='store_true', help='Turn on debugging output')
+    ap.add_argument('--dm', action='store_true', help='Play as Dungeon Master')
+    self.opts = ap.parse_args(argv[1:])
+    if self.opts.debug:
+      global _DEBUG
+      _DEBUG = True
 
-  screct = screen.get_rect()
-  barect = pygame.Rect(screct.width//4, screct.centery-16, screct.width//2, 32)
-  progressBar = ProgressBar(manager, barect, 0, text='Initializing...')
-  def UpdateProgress(p):
-    progressBar.SetProgress(p)
-    pygame.display.update(manager.RenderDirtyNow(screen))
-  UpdateProgress(0)
+  def InitApp(self):
+    print("Initializing...")
+    pygame.init()
+    pygame.mixer.quit()  # stop pygame 100% CPU bug circa 2017-2018
+    global manager
+    manager = WindowManager(text='manager')
 
-  if DEBUG:
-    if screen.get_flags() & pygame.HWACCEL: print("screen is HARDWARE ACCELERATED!")
-    if screen.get_flags() & pygame.HWSURFACE: print("screen is in video memory")
-  pygame.display.set_caption("SquareWorldCraft")
-  icon = pygame.image.load('icons/nested-squares-icon.png')
-  pygame.display.set_icon(icon)
-  #pygame.key.set_repeat(100, 100)
+    #screen = pygame.display.set_mode((1536,800))
+    self.screen = pygame.display.set_mode(ChooseVideoMode(), pygame.RESIZABLE)
 
-  LoadMaterialsProperties()
-  UpdateProgress(5)
-  world = World()
-  world.Generate(UpdateProgress)
-  appWnd = AppWnd(manager, screen, world, text='appWnd')
+    screct = self.screen.get_rect()
+    barect = pygame.Rect(screct.width//4, screct.centery-16, screct.width//2, 32)
+    progressBar = ProgressBar(manager, barect, 0, text='Initializing...')
+    def UpdateProgress(p):
+      progressBar.SetProgress(p)
+      pygame.display.update(manager.RenderDirtyNow(self.screen))
+    UpdateProgress(0)
 
-  #monofont = pygame.font.SysFont('freemono',16,bold=True)
-  #font_test_img = monofont.render('MWQj|_{}[]', False, (0,0,0))
-  #print('freemono 16 is {} px high'.format(font_test_img.get_height()))
-  #assert font_test_img.get_height() == 17
+    if _DEBUG:
+      if self.screen.get_flags() & pygame.HWACCEL: print("screen is HARDWARE ACCELERATED!")
+      if self.screen.get_flags() & pygame.HWSURFACE: print("screen is in video memory")
+    pygame.display.set_caption("SquareWorldCraft")
+    icon = pygame.image.load('icons/nested-squares-icon.png')
+    pygame.display.set_icon(icon)
+    #pygame.key.set_repeat(100, 100)
 
-  print("Ready.")
-  UpdateProgress(100)
-  progressBar.Delete()
+    LoadMaterialsProperties()
+    UpdateProgress(5)
+    self.world = World()
+    self.world.Generate(UpdateProgress)
+    appWnd = AppWnd(manager, self.screen, self.world, text='appWnd')
 
-  clock = pygame.time.Clock()
-  target_fps = 60
-  elapsed = target_fps
-  dt_std = SECOND // target_fps  # 1000/16 = 17+2/3
-  dt = dt_std
-  clock.tick() # Start measuring frames from now, not from when pygame was initialized.
-  quit = False
-  while not quit:
-    # Process events
-    for evt in pygame.event.get():
-      if evt.type is pygame.QUIT:
-        quit = True
-      elif evt.type is pygame.KEYDOWN:
-        if evt.key is pygame.K_q and evt.mod & pygame.KMOD_CTRL:
+    #monofont = pygame.font.SysFont('freemono',16,bold=True)
+    #font_test_img = monofont.render('MWQj|_{}[]', False, (0,0,0))
+    #print('freemono 16 is {} px high'.format(font_test_img.get_height()))
+    #assert font_test_img.get_height() == 17
+
+    if self.opts.dm:
+      self.world.player.AddInventory( (1, Woodaxe(Stone())) )
+      self.world.player.AddInventory( (1, Pickaxe(Iron())) )
+      self.world.player.AddInventory( (3, CampFire()) )
+      self.world.player.walkingSpeed = SECOND//30
+
+    print("Ready.")
+    UpdateProgress(100)
+    progressBar.Delete()
+
+  def MainLoop(self):
+    clock = pygame.time.Clock()
+    target_fps = 60
+    elapsed = target_fps
+    dt_std = SECOND // target_fps  # 1000/16 = 17+2/3
+    dt = dt_std
+    clock.tick() # Start measuring frames from now, not from when pygame was initialized.
+    quit = False
+    while not quit:
+      # Process events
+      for evt in pygame.event.get():
+        if evt.type is pygame.QUIT:
           quit = True
-        elif not manager.OnEvent(evt):
-          DebugKeystrokeEvent(evt)
-      elif evt.type is pygame.VIDEORESIZE:
-        # VIDEORESIZE is not reliably sent under Linux
-        #print('event VIDEORESIZE {}'.format(evt))
-        assert evt.size[0] == evt.w and evt.size[1] == evt.h
-        screen = pygame.display.set_mode(evt.size, pygame.RESIZABLE)
-        manager.Resize(pygame.Rect((0,0),evt.size))
-        appWnd.Resize(pygame.Rect((0,0),evt.size))
-      else:
-        manager.OnEvent(evt)
-    # Update state
-    world.Update(dt)
-    #if world.changed:
-    #  print('world changed')
-    #  appWnd.Dirty()
-    # Update screen
-    dirtyList = manager.RenderDirtyNow(screen)
-    if dirtyList:
-      label_text = '{:4d}x{:<4d}, {:4d} ms, {:3d} fps'.format(screen.get_width(), screen.get_height(), dt, SECOND//elapsed)
-      fps_label = manager.GetFont('LABEL').render(label_text, False, (255,255,0))
-      screen.blit(fps_label, ( screen.get_width() - fps_label.get_width()
-                             , screen.get_height() - fps_label.get_height()
-                             ))
-      world.player.Changed(False)
-      world.Changed(False)
-      pygame.display.update(dirtyList)
-    assert not (world.changed or world.player.changed)
-    elapsed = clock.tick(target_fps)
-    # On next timeslice, compensate for actual elapsed time.
-    dt = elapsed  # dt_std + (dt_std - elapsed)
-    #print('elapsed = {} ms, dt = {} ms'.format(elapsed,dt))
+        elif evt.type is pygame.KEYDOWN:
+          if evt.key is pygame.K_q and evt.mod & pygame.KMOD_CTRL:
+            quit = True
+          elif not manager.OnEvent(evt):
+            DebugKeystrokeEvent(evt)
+        elif evt.type is pygame.VIDEORESIZE:
+          # VIDEORESIZE is not reliably sent under Linux
+          #print('event VIDEORESIZE {}'.format(evt))
+          assert evt.size[0] == evt.w and evt.size[1] == evt.h
+          self.screen = pygame.display.set_mode(evt.size, pygame.RESIZABLE)
+          manager.Resize(pygame.Rect((0,0),evt.size))
+          appWnd.Resize(pygame.Rect((0,0),evt.size))
+        else:
+          manager.OnEvent(evt)
+      # Update state
+      self.world.Update(dt)
+      #if world.changed:
+      #  print('world changed')
+      #  appWnd.Dirty()
+      # Update screen
+      dirtyList = manager.RenderDirtyNow(self.screen)
+      if dirtyList:
+        label_text = '{:4d}x{:<4d}, {:4d} ms, {:3d} fps'.format(self.screen.get_width(), self.screen.get_height(), dt, SECOND//elapsed)
+        fps_label = manager.GetFont('LABEL').render(label_text, False, (255,255,0))
+        self.screen.blit(fps_label, ( self.screen.get_width() - fps_label.get_width()
+                                    , self.screen.get_height() - fps_label.get_height()
+                                    ))
+        self.world.player.Changed(False)
+        self.world.Changed(False)
+        pygame.display.update(dirtyList)
+      assert not (self.world.changed or self.world.player.changed)
+      elapsed = clock.tick(target_fps)
+      # On next timeslice, compensate for actual elapsed time.
+      dt = elapsed  # dt_std + (dt_std - elapsed)
+      #print('elapsed = {} ms, dt = {} ms'.format(elapsed,dt))
+    return 0
 
-if __name__=='__main__':
-  if '--debug' in sys.argv:
-    DEBUG = True
-    windowing._DEBUG = True
-  pygame.init()
-  pygame.mixer.quit()  # stop pygame 100% CPU bug circa 2017-2018
+
+def main(argv):
+  if '--profile' in argv:
+    sys.argv.remove('--profile')
+    import cProfile
+    return cProfile.run('main(sys.argv)', sort='cumulative')
+  app = Application(argv)
+  rc = 3
   try:
-    if '--profile' in sys.argv:
-      import cProfile
-      cProfile.run('main(sys.argv)', sort='cumulative')
-    else:
-      main(sys.argv)
+    rc = app.MainLoop()
   finally:
     pygame.quit()
+  return rc
+
+if __name__=='__main__': sys.exit(main(sys.argv))
 
