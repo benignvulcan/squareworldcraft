@@ -513,7 +513,7 @@ class ProgressBar(Window):
     BORDER = 2
     pbar = pygame.Rect(self.localRect).inflate(-BORDER, -BORDER)
     pbar.width = pbar.width * self.progress // 100
-    print('pbar =',pbar)
+    if _DEBUG: print('pbar =',pbar)
     pygame.draw.rect(surf, colors['fg'], pbar)
 
 class Button(Window):

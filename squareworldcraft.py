@@ -128,6 +128,8 @@ DEBUG = False
 def IFDEBUG(value):
   if DEBUG: return value
   else: return None
+def BUGPRINT(fmtstr, *posargs, **kwargs):
+  if DEBUG: print(fmtstr.format(*posargs, **kwargs))
 
 SECOND = 1000  # conversion factor from seconds to standard units (miliseconds)
 
@@ -323,11 +325,11 @@ assert Stone(inSitu=True) is Stone(inSitu=True)
 assert Stone() != Stone(inSitu=True)
 assert Stone(inSitu=False) != Stone(inSitu=True)
 assert Stone(inSitu=False) != Stone()
-print(Stone().DisplayName(), Stone(inSitu=True).DisplayName(), Stone(inSitu=False).DisplayName())
+BUGPRINT('{} {} {}', Stone().DisplayName(), Stone(inSitu=True).DisplayName(), Stone(inSitu=False).DisplayName())
 assert Stone().DisplayName() == 'Stone'
 assert Stone(inSitu=True).DisplayName() == 'Stone'
 assert Stone(inSitu=False).DisplayName() == 'Stone'
-print(Stone().BaseIconName(), Stone(inSitu=True).BaseIconName(), Stone(inSitu=False).BaseIconName())
+BUGPRINT('{} {} {}', Stone().BaseIconName(), Stone(inSitu=True).BaseIconName(), Stone(inSitu=False).BaseIconName())
 assert Stone().BaseIconName() == 'Stone'
 assert Stone(inSitu=True).BaseIconName() == 'StoneSitu'
 assert Stone(inSitu=False).BaseIconName() == 'Stone'
@@ -444,7 +446,7 @@ def LoadMaterialsProperties():
       assert isinstance(cell, str)
       assert cell.isidentifier() or cell.startswith('#')
       attributes.append(cell)
-    print('attributes = ', attributes)
+    BUGPRINT('attributes = {}', attributes)
     for row in sheet:
       if len(row) < 2:
         continue
@@ -473,7 +475,7 @@ def LoadMaterialsProperties():
           else:
             value = float(value)
         assert not attr in vars(klass)
-        print('{}.{} = {}'.format(klassname, attr, value))
+        BUGPRINT('{}.{} = {}', klassname, attr, value)
         setattr(klass, attr, value)
 
 CARDINAL_DIRECTIONS = ( (0,-1), (1,0), (0,1), (-1,0) )
@@ -491,6 +493,15 @@ class AnimateThing(Observable, Thing):
     self.changed = changed
     if changed:
       self.NotifyChange()
+
+  def IsAlive(self):
+    return self.energy > 0
+
+  def GetColor(self):
+    c = super().GetColor()
+    if not self.IsAlive():
+      c = (c[0]//4, c[1]//4, c[2]//4)
+    return c
 
   def CanOccupy(self, newpos):
     'Return True if self can be at the given position.'
@@ -519,14 +530,17 @@ class Animal(AnimateThing):
     self.speed = SECOND//2 * random.randint(1,8)
 
   def PickWalk(self, points):
+    # Move away from player, if possible
     d = ManhattanDistance(self.pos, self.world.player.pos)
     if d < 10:
       pts2 = sorted( ((ManhattanDistance(p,self.world.player.pos),p) for p in points), reverse=True )
       pts3 = itertools.takewhile(lambda t: t[0] == pts2[0][0], pts2)
       if pts3:
         points = tuple(t[1] for t in pts3)
+    # Usually walk in same direction, if possible
     pt = (self.pos[0]+self.walkingDirection[0], self.pos[1]+self.walkingDirection[1])
     if not (pt in points and random.randrange(5)):
+      # Sometimes walk randomly
       pt = random.choice(points)
     return pt
 
@@ -535,7 +549,7 @@ class Animal(AnimateThing):
     self.walkingTimeout -= dt
     if self.walkingTimeout < 0:
       self.walkingTimeout = 0
-    if self.walkingTimeout <= 0:
+    if self.walkingTimeout <= 0 and self.energy > 0:
       choices = [tuple(self.pos)]
       for d in CARDINAL_DIRECTIONS:
         pt = (self.pos[0]+d[0], self.pos[1]+d[1])
@@ -548,12 +562,19 @@ class Animal(AnimateThing):
         self.walkingTimeout += self.speed
 
   def Update(self, dt):
+    if self.energy > 0 and dt >= self.energy: print('Animal died!')
     self.UpdateWalking(dt)
+    if self.energy >= 2000 * SECOND:
+      self.energy -= 1000 * SECOND
+      child = self.__class__(self.world, self.pos)
+      child.speed = self.speed
+      self.world.AddAnimal(child)
 
 class Herbivore(Animal):
   color_hsv = (90,100,50)
 
   def PickWalk(self, points):
+    # Eat what's here, then do regular walk.
     numthing, thing = self.world.ThingsAt(self.pos)
     if numthing and isinstance(thing, (Grass,Vine)):
       self.world.SetThingsAt(self.pos, (0,None))
@@ -951,9 +972,12 @@ class World(Observable):
         if not thing.isTraversable():
           continue
       a = Herbivore(self,p)
-      self.animals.setdefault(p, []).append(a)
-      a.Subscribe(CHANGE, self.OnChange)
+      self.AddAnimal(a)
     print('{} animals created'.format(len(self.animals)))
+
+  def AddAnimal(self, a):
+    self.animals.setdefault(tuple(a.pos), []).append(a)
+    a.Subscribe(CHANGE, self.OnChange)
 
   def Changed(self, changed=True):
     self.changed = changed
@@ -1192,7 +1216,7 @@ class HotbarWnd(Window):
     self.player.Subscribe(CHANGE, self.OnChange)
 
   def OnClick(self, evt):
-    print('HotbarWnd.OnClick({}), id={}'.format(evt, evt.sender.idx))
+    BUGPRINT('HotbarWnd.OnClick({}), id={}', evt, evt.sender.idx)
     self.player.SelectInventory(evt.sender.idx)
 
   def ZoomAbs(self, power):
@@ -1324,7 +1348,7 @@ class CatalystsPanel(Window):
     super().OnChange(evt)
 
   def Rescan(self):
-    print('CatalystsPanel.Rescan()')
+    BUGPRINT('CatalystsPanel.Rescan()')
     self.catalystThings = []
     pp = self.world.player.pos
     for y in (-1,0,1):
@@ -1434,16 +1458,16 @@ class ProductsPanel(Window):
   def SetProducts(self, consumables, somethings):
     self._consumables = consumables
     self._productSomeThings = somethings
-    print("productSomeThings =", somethings)
+    BUGPRINT("productSomeThings = {}", somethings)
     self.Dirty()
   def GetProducts(self):
     return self._productSomeThings[:]
   def OnRender(self, surf):
-    print('ProductsPanel.OnRender()')
+    BUGPRINT('ProductsPanel.OnRender()')
     super().OnRender(surf)
     i = 0
     for numthing, productThing in self._productSomeThings:
-      print('Rendering product #{}'.format(i))
+      BUGPRINT('Rendering product #{}', i)
       icon = productThing.GetIcon((self.size, self.size))
       surf.blit(icon, (i*self.size, 0))
       i += 1
@@ -1531,7 +1555,7 @@ class CraftingWnd(Window):
     self.UpdateMatrixProduct()
 
   def OnChange(self, evt):
-    print("CraftingWnd.OnChange() !")
+    BUGPRINT("CraftingWnd.OnChange() !")
 
   def OnPlayerChanged(self, evt):
     # Note that this is called every time the player changes in any way,
@@ -1578,7 +1602,7 @@ class CraftingWnd(Window):
     self.productsWnd.SetEnabled( self.world.player.HasThings( (1, t) for t in self.consumables ) )
 
   def OnClick(self, evt):
-    print('CraftingWnd.OnClick({})'.format(evt))
+    BUGPRINT('CraftingWnd.OnClick({})', evt)
     if self.world.player.HasThings( (1, t) for t in self.consumables ):
       for t in self.consumables:
         numremoved, thingremoved = self.world.player.RemoveInventory( (1, t) )
@@ -1599,7 +1623,7 @@ class AppWnd(Window):
     self.ResizeChildren()
 
   def DummyClick(self, evt):
-    print('DummyClick!')
+    BUGPRINT('DummyClick!')
 
   def ResizeChildren(self):
     self.worldWnd.Resize(pygame.Rect((0,0),self.rect.size))
@@ -1650,7 +1674,7 @@ def DebugKeystrokeEvent(evt):
     fields.append('unicode = {:04X}'.format(ord(evt.unicode)) )
     if evt.unicode.isprintable():
       fields.append( '"{}"'.format(evt.unicode) )
-  print(' '.join(fields))
+  BUGPRINT('{}', ' '.join(fields))
 
 def ChooseVideoMode(margin=(96,96)):
   modes = pygame.display.list_modes()
@@ -1661,7 +1685,7 @@ def ChooseVideoMode(margin=(96,96)):
     target = (vi.current_w - margin[0], vi.current_h - margin[1])
     for m in modes:
       if m[0] <= target[0] and m[1] <= target[1]:
-        if DEBUG: print('Display resolution:', m)
+        BUGPRINT('Display resolution: {}', m)
         return m
   return (0,0)
 
