@@ -488,12 +488,35 @@ def LoadMaterialsProperties():
 CARDINAL_DIRECTIONS = ( (0,-1), (1,0), (0,1), (-1,0) )
 
 class AnimateThing(Observable, Thing):
+
   color_hsv = (0,100,100)
-  def __init__(self, world, initialpos, *posargs, **kwargs):
+
+  @classmethod
+  def InitClassConstants(cls):
+    cls.SPEED_MIN = 0.25 / SECOND   # tiles/sec of movement speed
+    cls.SPEED_MAX = 4.00 / SECOND
+
+    # Energy here is effectively "number of milliseconds to live".
+    # It is expended (by living creatures) at the following baseline rate:
+    cls.ENERGY_EXPENDITURE_BASELINE = 1 * SECOND//SECOND  # 1 per ms
+
+    cls.DIGESTION_EFFICIENCY = 0.1
+    cls.DIGESTION_INEFFICIENCY = int(1.0 / cls.DIGESTION_EFFICIENCY)
+
+    # Minimum viable energy is effectively the energy a Carnivore gets
+    # (times inefficiency) from the corpse of an animal that died of starvation.
+    cls.ENERGY_MINIMUM_VIABLE = cls.DIGESTION_INEFFICIENCY * cls.ENERGY_EXPENDITURE_BASELINE * 120 * SECOND
+
+    print('ENERGY_MINIMUM_VIABLE = {}'.format(cls.ENERGY_MINIMUM_VIABLE))
+
+  def __init__(self, world, initialpos, *posargs, energy=None, **kwargs):
     super().__init__(*posargs, **kwargs)
     self.world = world
     self.pos = [initialpos[0], initialpos[1]]
-    self.energy = 1000 * SECOND  # effectively "number of milliseconds of life remaining"
+    if energy is None:
+      energy = self.ENERGY_MINIMUM_VIABLE
+    self.energy = energy
+    self.age = 0
     self.Changed()
 
   def Changed(self, changed=True):
@@ -502,7 +525,7 @@ class AnimateThing(Observable, Thing):
       self.NotifyChange()
 
   def IsAlive(self):
-    return self.energy > 0
+    return self.energy >= self.ENERGY_MINIMUM_VIABLE
 
   def GetColor(self):
     c = super().GetColor()
@@ -527,23 +550,40 @@ class AnimateThing(Observable, Thing):
     self.Changed()
 
   def Update(self, dt):
-    pass
+    self.age += dt
+
+AnimateThing.InitClassConstants()
 
 class Animal(AnimateThing):
+
   def __init__(self, *posargs, **kwargs):
     super().__init__(*posargs, **kwargs)
     self.walkingTimeout = 0  # Time to wait until next walking can be performed
     self.walkingDirection = (random.randrange(3)-1,random.randrange(3)-1)
-    self.speed = SECOND//2 * random.randint(1,8)
+    self.speed = random.uniform(self.SPEED_MIN, self.SPEED_MAX)
+
+  def FindNearestTargetPoints(self, targetFilter, radius=20):
+    'Return a tuple of the nearest (and therefore equidistant) points of interest'
+    targets = []
+    # Include Player?
+    if ManhattanDistance(self.pos, self.world.player.pos) <= radius and targetFilter(self.world.player):
+      targets.append(tuple(self.world.player.pos))
+    # Find all animals in range
+    for p in self.world.animals.keys():
+      if ManhattanDistance(self.pos, p) <= radius:
+        for a in self.world.animals[p]:
+          if not a is self and targetFilter(a):
+            targets.append(p)
+    if targets:
+      # Find nearest of the nearby targets
+      targets.sort(key=lambda p: ManhattanDistance(self.pos, p))
+      nearest = ManhattanDistance(self.pos, targets[0])
+      nearestTargets = itertools.takewhile(lambda p: ManhattanDistance(self.pos,p)==nearest, targets)
+      if nearestTargets:
+        targets = nearestTargets
+    return tuple(targets)
 
   def PickWalk(self, points):
-    # Move away from player, if possible
-    d = ManhattanDistance(self.pos, self.world.player.pos)
-    if d < 10:
-      pts2 = sorted( ((ManhattanDistance(p,self.world.player.pos),p) for p in points), reverse=True )
-      pts3 = itertools.takewhile(lambda t: t[0] == pts2[0][0], pts2)
-      if pts3:
-        points = tuple(t[1] for t in pts3)
     # Usually walk in same direction, if possible
     pt = (self.pos[0]+self.walkingDirection[0], self.pos[1]+self.walkingDirection[1])
     if not (pt in points and random.randrange(5)):
@@ -552,11 +592,10 @@ class Animal(AnimateThing):
     return pt
 
   def UpdateWalking(self, dt):
-    self.energy -= dt
     self.walkingTimeout -= dt
     if self.walkingTimeout < 0:
       self.walkingTimeout = 0
-    if self.walkingTimeout <= 0 and self.energy > 0:
+    if self.walkingTimeout <= 0 and self.energy >= self.ENERGY_MINIMUM_VIABLE:
       choices = [tuple(self.pos)]
       for d in CARDINAL_DIRECTIONS:
         pt = (self.pos[0]+d[0], self.pos[1]+d[1])
@@ -566,26 +605,91 @@ class Animal(AnimateThing):
         pt = self.PickWalk(choices)
         self.walkingDirection = (pt[0]-self.pos[0], pt[1]-self.pos[1])
         self.MoveTo(pt)
-        self.walkingTimeout += self.speed
+        assert self.speed > 0.0
+        self.walkingTimeout += int(1.0 / self.speed)
 
   def Update(self, dt):
-    if self.energy > 0 and dt >= self.energy: print('Animal died!')
-    self.UpdateWalking(dt)
-    if self.energy >= 2000 * SECOND:
-      self.energy -= 1000 * SECOND
-      child = self.__class__(self.world, self.pos)
+    if self.energy < self.ENERGY_MINIMUM_VIABLE:
+      return
+    self.UpdateWalking(dt)  # may consume food as side-effect
+    self.energy -= dt * self.ENERGY_EXPENDITURE_BASELINE
+    super().Update(dt)
+    if self.energy < self.ENERGY_MINIMUM_VIABLE:
+      print('{} died @ {}, aged {}s, with {} energy'.format(
+                self.__class__.__name__, self.pos, self.age / SECOND, self.energy))
+    elif self.energy >= self.energy_reproduction:
+      self.energy -= self.energy_reproduction // 2
+      child = self.__class__(self.world, self.pos, energy=self.energy_reproduction // 2)
       child.speed = self.speed
       self.world.AddAnimal(child)
+      print('{} born @ {} with {} energy'.format(self.__class__.__name__, self.pos, child.energy))
 
 class Herbivore(Animal):
   color_hsv = (90,100,50)
+
+  def __init__(self, *posargs, **kwargs):
+    super().__init__(*posargs, **kwargs)
+    self.energy_safety_margin = self.ENERGY_EXPENDITURE_BASELINE * 30 * SECOND
+    self.energy += self.energy_safety_margin
+    self.energy_reproduction = self.energy * 2
 
   def PickWalk(self, points):
     # Eat what's here, then do regular walk.
     numthing, thing = self.world.ThingsAt(self.pos)
     if numthing and isinstance(thing, (Grass,Vine)):
       self.world.SetThingsAt(self.pos, (0,None))
-      self.energy += 10 * SECOND
+      self.energy += 20 * SECOND
+    # Move away from player and Carnivores, if possible
+    nearestPredators = self.FindNearestTargetPoints(lambda t: isinstance(t, (Carnivore,Player)))
+    if nearestPredators:
+      # Evaluate dangerousness of each move
+      metrics = [ (sum(ManhattanDistance(p,q) for q in nearestPredators)/len(nearestPredators), p) for p in points ]
+      metrics.sort(reverse=True)
+      # Sigh. Failing to immediately force the output of takewhile() results in it attempting to
+      # evaulate `metrics` later after `metrics` has been re-bound to an incompatible value!
+      betterMetrics = tuple(itertools.takewhile(lambda t: t[0]==metrics[0][0], metrics))
+      if betterMetrics:
+        metrics = betterMetrics  # some were less dangerous, so go one of those directions
+      points = tuple(t[1] for t in metrics)
+    return super().PickWalk(points)
+
+class Carnivore(Animal):
+  color_hsv = (30,75,75)
+
+  def __init__(self, *posargs, **kwargs):
+    super().__init__(*posargs, **kwargs)
+    self.energy_safety_margin = self.ENERGY_EXPENDITURE_BASELINE * 120 * SECOND
+    self.energy += self.energy_safety_margin
+    self.energy_reproduction = self.energy * 2
+    # For now:
+    #   * Carnivores have much less plentiful food
+    #   * But are faster than Herbivores
+    self.speed *= 1.5
+
+  def PickWalk(self, points):
+    # Eat some of what's here, then do regular walk.
+    for a in tuple(self.world.animals.get(tuple(self.pos),[])):
+      if isinstance(a, Herbivore) or (isinstance(a,Carnivore) and not a.IsAlive()):
+        if a.IsAlive():
+          wasAlive = 'live'
+        else:
+          wasAlive = 'dead'
+        acquired_energy = a.energy // 10
+        a.energy = 0
+        self.energy += acquired_energy
+        self.world.RemoveAnimal(self.pos, a)
+        print('{} {} eaten @ {} for {} energy'.format(wasAlive, a.__class__.__name__, self.pos, acquired_energy))
+        break
+    # Move toward player and Herbivores, if possible
+    nearestPrey = self.FindNearestTargetPoints(lambda t: isinstance(t, (Herbivore,Player) or not t.IsAlive()))
+    if nearestPrey:
+      # Evaluate attractiveness of each move
+      metrics = [ (sum([ManhattanDistance(p,q) for q in nearestPrey])/len(nearestPrey), p) for p in points ]
+      metrics.sort()
+      betterMetrics = tuple(itertools.takewhile(lambda t: t[0]==metrics[0][0], metrics))
+      if betterMetrics:
+        metrics = betterMetrics  # some were more attractive, so go in one of those directions
+      points = tuple(t[1] for t in metrics)
     return super().PickWalk(points)
 
 keyToWalkDirection = \
@@ -978,13 +1082,22 @@ class World(Observable):
       if numthing and not thing is None:
         if not thing.isTraversable():
           continue
-      a = Herbivore(self,p)
+      if random.randrange(4):
+        a = Herbivore(self,p)
+      else:
+        a = Carnivore(self,p)
       self.AddAnimal(a)
     print('{} animals created'.format(len(self.animals)))
 
   def AddAnimal(self, a):
     self.animals.setdefault(tuple(a.pos), []).append(a)
     a.Subscribe(CHANGE, self.OnChange)
+
+  def RemoveAnimal(self, p, a):
+    p = tuple(p)
+    self.animals[p].remove(a)
+    if not self.animals[p]:
+      del self.animals[p]
 
   def Changed(self, changed=True):
     self.changed = changed
@@ -1014,12 +1127,14 @@ class World(Observable):
 
   def Update(self, dt):
     self.player.Update(dt)
+    # Animals can move or die during this loop.
     for p in tuple(self.animals.keys()):
       for a in tuple(self.animals[p]):
-        self.animals[p].remove(a)
-        a.Update(dt)
-        self.animals.setdefault(tuple(a.pos),[]).append(a)
-      if not self.animals[p]:
+        if p in self.animals and a in self.animals[p]:
+          self.animals[p].remove(a)
+          a.Update(dt)
+          self.animals.setdefault(tuple(a.pos),[]).append(a)
+      if p in self.animals and not self.animals[p]:
         del self.animals[p]
     self.GrowPlants(dt)
 
@@ -1178,7 +1293,18 @@ class WorldWnd(Window):
       self.player.OnUsePrimaryBegin(hitpos)
       return True
     elif evt.unicode == '?':
-      print('player_pos = {}'.format(self.world.player.pos))
+      print('player.pos = {}'.format(self.world.player.pos))
+      nHerb = 0
+      nCarni = 0
+      nDead = 0
+      for p in self.world.animals:
+        for a in self.world.animals[p]:
+          if not a.IsAlive():
+            nDead += 1
+          elif isinstance(a, Herbivore): nHerb += 1
+          elif isinstance(a, Carnivore): nCarni += 1
+          else: assert False
+      print('{} animals = {} herbivores + {} carnivores + {} dead'.format(nHerb+nCarni+nDead, nHerb, nCarni, nDead))
     return False
 
   def OnKeyUp(self, evt):
