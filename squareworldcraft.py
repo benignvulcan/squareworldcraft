@@ -1741,7 +1741,7 @@ class Application:
     UpdateProgress(5)
     self.world = World()
     self.world.Generate(UpdateProgress)
-    appWnd = AppWnd(manager, self.screen, self.world, text='appWnd')
+    self.appWnd = AppWnd(manager, self.screen, self.world, text='appWnd')
 
     #monofont = pygame.font.SysFont('freemono',16,bold=True)
     #font_test_img = monofont.render('MWQj|_{}[]', False, (0,0,0))
@@ -1783,14 +1783,14 @@ class Application:
           assert evt.size[0] == evt.w and evt.size[1] == evt.h
           self.screen = pygame.display.set_mode(evt.size, pygame.RESIZABLE)
           manager.Resize(pygame.Rect((0,0),evt.size))
-          appWnd.Resize(pygame.Rect((0,0),evt.size))
+          self.appWnd.Resize(pygame.Rect((0,0),evt.size))
         else:
           manager.OnEvent(evt)
       # Update state
       self.world.Update(dt)
-      #if world.changed:
+      #if self.world.changed:
       #  print('world changed')
-      #  appWnd.Dirty()
+      #  self.appWnd.Dirty()
       # Update screen
       dirtyList = manager.RenderDirtyNow(self.screen)
       if dirtyList:
