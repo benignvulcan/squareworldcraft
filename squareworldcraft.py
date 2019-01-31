@@ -1853,6 +1853,7 @@ class Application:
     ap = argparse.ArgumentParser()
     ap.add_argument('--debug', action='store_true', help='Turn on debugging output')
     ap.add_argument('--dm', action='store_true', help='Play as Dungeon Master')
+    ap.add_argument('--overclock', type=int, default=1, help='Run the simulation at N times speed')
     self.opts = ap.parse_args(argv[1:])
     if self.opts.debug:
       global _DEBUG
@@ -1909,7 +1910,10 @@ class Application:
 
   def MainLoop(self):
     clock = pygame.time.Clock()
-    target_fps = 60
+    if self.opts.overclock > 1:
+      target_fps = 12
+    else:
+      target_fps = 60
     elapsed = target_fps
     dt_std = SECOND // target_fps  # 1000/16 = 17+2/3
     dt = dt_std
@@ -1935,7 +1939,7 @@ class Application:
         else:
           manager.OnEvent(evt)
       # Update state
-      self.world.Update(dt)
+      self.world.Update(dt*self.opts.overclock)
       #if self.world.changed:
       #  print('world changed')
       #  self.appWnd.Dirty()
