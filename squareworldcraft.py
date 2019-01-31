@@ -1033,7 +1033,7 @@ class World(Observable):
       left = random.randrange(self.sz[0] - width)
       r = pygame.Rect(left, top, width, height)
       self.ThingFill(r, (1, Clay(inSitu=True)))
-      self.LightFill(r.inflate(-2,-2), False)
+      self.LightFill(r.inflate(-4,-4), False)
 
   def GenerateRock(self):
     for i in range(self.area // 5000):
@@ -1042,8 +1042,8 @@ class World(Observable):
       top = random.randrange(self.sz[1] - height)
       left = random.randrange(self.sz[0] - width)
       r = pygame.Rect(left, top, width, height)
-      self.ThingFill(r, (1, Stone(inSitu=True)))
-      self.LightFill(r.inflate(-2,-2), False)
+      self.ThingFill(r, (2, Stone(inSitu=True)))
+      self.LightFill(r.inflate(-4,-4), False)
       ores = list(ore for ore, count in 
         { Bismuthinite : 3
         , Cassiterite : 2
@@ -1176,9 +1176,9 @@ class World(Observable):
   def SetThingsAt(self, p, something):
     self.things[p[1]][p[0]] = something
     self.ExposeToLight(p)
-  def ExposeToLight(self, p):
-    for dy in (-1,0,1):
-      for dx in (-1,0,1):
+  def ExposeToLight(self, p, r=2):
+    for dy in range(-r,r+1):
+      for dx in range(-r,r+1):
         q = (p[0]+dx, p[1]+dy)
         if self.CollidePoint(q):
           self.lighting[q[1]][q[0]] = True
