@@ -1125,6 +1125,27 @@ class World(Observable):
         self.things[r.top+row][r.left+col] = value
     self.Changed()
 
+  def FindEmptySpotNear(self, p, max_radius=99):
+    for radius in range(max_radius):
+      for row in range(p[1]-radius,p[1]+1+radius):
+        if row < 0 or row >= self.sz[1]:
+          continue
+        for col in range(p[0]-radius,p[0]+1+radius):
+          if col < 0 or col >= self.sz[0]:
+            continue
+          if not self.ground[row][col].isTraversable():
+            continue
+          (numthing, thing) = self.things[row][col]
+          if numthing and not thing.isTraversable():
+            continue
+          return (col,row)
+    return None
+
+  def MovePlayerToEmptySpot(self):
+    p = self.FindEmptySpotNear(self.player.pos)
+    if not p is None:
+      self.player.MoveTo(p)
+
   def Update(self, dt):
     self.player.Update(dt)
     # Animals can move or die during this loop.
@@ -1867,6 +1888,7 @@ class Application:
     UpdateProgress(5)
     self.world = World()
     self.world.Generate(UpdateProgress)
+    self.world.MovePlayerToEmptySpot()
     self.appWnd = AppWnd(manager, self.screen, self.world, text='appWnd')
 
     #monofont = pygame.font.SysFont('freemono',16,bold=True)
