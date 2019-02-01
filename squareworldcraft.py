@@ -220,9 +220,11 @@ class Thing:
       Thing.icon_cache[key] = img
     return Thing.icon_cache[key]
 
-  def isTraversable(self): return False
+  def IsTraversable(self): return False
   def WouldHarvestUsing(self, tool): return (0,None)
   def IsWorkstation(self): return False
+  def IsPickUpAble(self): return False
+  def IsPlaceable(self): return False
 
   def UseDuration(self):
     'Time (in ms) it takes to use/swing this tool once'
@@ -262,7 +264,7 @@ class TerrainWater(Terrain):
 class TerrainSaltWater(TerrainWater):
   pass
 class TerrainLand(Terrain):
-  def isTraversable(self): return True
+  def IsTraversable(self): return True
   def GetColor(self): return (127,95,63)
 class TerrainRock(TerrainLand):
   pass
@@ -289,7 +291,7 @@ class Situatable(FlyweightThing):
     if self._inSitu:
       name += 'Situ'
     return name
-  def isTraversable(self): return not self._inSitu
+  def IsTraversable(self): return not self._inSitu
   def EnergyToHarvest(self):
     if self._inSitu:
       return 500
@@ -307,14 +309,19 @@ class Harvestable(Situatable):
         return something
     return nothing
 
-class PickUpAble(Harvestable): pass
-class Rock(Harvestable): pass
-class Ore(Harvestable): pass
-class Metal(PickUpAble):
+class PickUpAble(Harvestable):
+  def IsPickUpAble(self): return True
+
+class Placeable(Thing):
+  def IsPlaceable(self): return True
+
+class Rock(PickUpAble, Placeable): pass
+class Ore(PickUpAble, Placeable): pass
+class Metal(PickUpAble, Placeable):
   _symbolName = ''
   def SymbolName(self): return self._symbolName
 class Alloy(Metal): pass
-class Gem(Harvestable): pass
+class Gem(PickUpAble, Placeable): pass
 class Plant(Harvestable):
   def WouldHarvestUsing(self, tool):
     if (self._inSitu and isinstance(tool, Woodaxe)) or not self._inSitu:
@@ -338,7 +345,7 @@ assert Stone().BaseIconName() == 'Stone'
 assert Stone(inSitu=True).BaseIconName() == 'StoneSitu'
 assert Stone(inSitu=False).BaseIconName() == 'Stone'
 
-class Clay(Harvestable):
+class Clay(PickUpAble, Placeable):
   color_hsv = (20,50,40)
 
 class Cassiterite(Ore): pass
@@ -392,10 +399,10 @@ class Galena(Ore): pass
 class Lead(Metal):
   _symbolName = 'Pb'
 
-class Wood(Plant): pass
+class Wood(Plant, PickUpAble, Placeable): pass
 class Grass(Plant):
   def GetColor(self): return (0,127,0)
-class Vine(Plant):
+class Vine(Plant, PickUpAble, Placeable):
   def GetColor(self): return (0, 191, 0)
 
 class OfMaterial(Thing):
@@ -425,23 +432,38 @@ class Hammer(Tool, OfMaterial):
     return self._material.hardness
 
 # TODO:
-#   Stones -> Stone Furnace (higher temperature than CampFire)
 #   Clay --[Furnace]--> Ceramic Bowl/Crucible
 #   Sand + Clay --[Furnace]--> Bricks
 #   Sand + Clay --[Furnace]--> Mold(Anvil)
 #   Bloomery - the earliest sort of smelting furnace
 #   Forge - a better open fire, using coal/coke/charcoal, bellows, tuyere & hearth
 #   Metal + Mold(Anvil) --[Forge?]--> Anvil
-#   Bricks -> Brick Furnace (higher temperature than Stone Furnace)
 #   Metal --[Anvil+Forge?]-> PickaxeHead
-#   Wood + PickaxeHead -> Pickaxe (Pickaxe is faster than Hammer, metal is tougher than Stone)
 #   Shovel (faster than Hands)
 #   Crucible ?
 
-class CampFire(FlyweightThing):
-  color_hsv = (20,100,100)
+class Charcoal(PickUpAble, Placeable):
+  pass
+class Coke(PickUpAble, Placeable):
+  pass
+class Brick(PickUpAble, Placeable):
+  color_hsv = (20,85,80)
+  # A regular (non "firebrick") brick can withstand temperatures up to about 1200f (=992K)
+class FireBrick(PickUpAble, Placeable):
+  color_hsv = (20,25,95)
+  # Withstands temperatures up to around 1800f (=1255K)
+
+class Workstation(Placeable):
   def IsWorkstation(self): return True
-class Table(FlyweightThing):
+class CampFire(Workstation):
+  color_hsv = (20,100,100)
+class StoneFurnace(Workstation):
+  color_hsv = (0,0,50)
+class BrickFurnace(Workstation):
+  color_hsv = Brick.color_hsv
+class FireBrickFurnace(Workstation):
+  color_hsv = FireBrick.color_hsv
+class Table(Workstation):
   def GetColor(self): return (204,150,86)
 
 def LoadMaterialsProperties():
@@ -539,7 +561,7 @@ class AnimateThing(Observable, Thing):
       return False
     terrain = self.world.ground[newpos[1]][newpos[0]]
     numthing, thing = self.world.ThingsAt(newpos)
-    if terrain.isTraversable() and (numthing==0 or thing is None or thing.isTraversable()):
+    if terrain.IsTraversable() and (numthing==0 or thing is None or thing.IsTraversable()):
       return True
     return False
 
@@ -954,7 +976,7 @@ class Player(AnimateThing):
       elif self.wieldType is Player.WIELD_MATERIAL and numheld and not held is None:
         numtarget, target = self.world.ThingsAt(self.wieldPos)
         if numtarget == 0 and numheld and ChessboardDistance(self.wieldPos, self.pos) == 1:
-          if isinstance(held, (Wood, Stone, Vine, CampFire, Malachite, NativeSilver, NativeGold, Copper, Silver, Gold)):
+          if held.IsPlaceable():
             (numremoved, removed) = self.RemoveInventory( (1,held), self.inventory_selection )
             if numremoved:
               self.world.SetThingsAt(self.wieldPos, (numremoved, removed))
@@ -1080,7 +1102,7 @@ class World(Observable):
       p = ( random.randrange(self.sz[0]), random.randrange(self.sz[1]) )
       numthing, thing = self.things[p[1]][p[0]]
       if numthing and not thing is None:
-        if not thing.isTraversable():
+        if not thing.IsTraversable():
           continue
       if random.randrange(4):
         a = Herbivore(self,p)
@@ -1133,10 +1155,10 @@ class World(Observable):
         for col in range(p[0]-radius,p[0]+1+radius):
           if col < 0 or col >= self.sz[0]:
             continue
-          if not self.ground[row][col].isTraversable():
+          if not self.ground[row][col].IsTraversable():
             continue
           (numthing, thing) = self.things[row][col]
-          if numthing and not thing.isTraversable():
+          if numthing and not thing.IsTraversable():
             continue
           return (col,row)
     return None
@@ -1626,35 +1648,55 @@ class ProductsPanel(Window):
       surf.blit(icon, (i*self.size, 0))
       i += 1
 
+# Crafting Productions:
 # [ catalyst_list, pattern_matrix, output_constructor ]
 # m is the matrix of input Thing instances that matched the pattern
-crafting_productions = \
+
+barehand_productions = \
   [ ([], [[Stone],[Stone]],         lambda m: [(1,AxeHead(Stone()))])
   , ([], [[Stone],[Wood]],          lambda m: [(1,Hammer(m[0][0]))])
   , ([], [[AxeHead],[Wood]],        lambda m: [(1,Woodaxe(m[0][0].Material()))])
   , ([], [[PickaxeHead],[Wood]],    lambda m: [(1,Pickaxe(m[0][0].Material()))])
   , ([], [[Wood,Wood],[Wood,Wood]], lambda m: [(1,CampFire())])
+  , ([], [[Stone,Stone],[Stone,Stone],[Charcoal,Charcoal]], lambda m: [(1,StoneFurnace())])
+  , ([], [[Brick,Brick],[Brick,Brick],[Charcoal,Charcoal]], lambda m: [(1,BrickFurnace())])
+  , ([], [[FireBrick,FireBrick],[FireBrick,FireBrick],[Charcoal,Charcoal]], lambda m: [(1,FireBrickFurnace())])
+  ]
 
+campfire_productions = \
+  [ ([CampFire], [[Wood]],           lambda m: [(1,Charcoal())])
+  # For now, smelt ores that melt up to 1373K
   , ([CampFire], [[Bismuthinite]],   lambda m: [(2,Bismuth())])
-# , ([CampFire], [[Cassiterite]],    lambda m: [(2,Tin())])
-# , ([CampFire], [[Galena]],         lambda m: [(2,Lead()),(1,Silver())])
-# , ([CampFire], [[Garnierite]],     lambda m: [(2,Nickel())])
-# , ([CampFire], [[Hematite]],       lambda m: [(2,Iron())])
-# , ([CampFire], [[Limonite]],       lambda m: [(2,Iron())])
-# , ([CampFire], [[Magnetite]],      lambda m: [(2,Iron())])
   , ([CampFire], [[Malachite]],      lambda m: [(2,Copper())])
-# , ([CampFire], [[NativeAluminum]], lambda m: [(2,Aluminum())])
   , ([CampFire], [[NativeGold]],     lambda m: [(2,Gold())])
-# , ([CampFire], [[NativePlatinum]], lambda m: [(2,Platinum())])
   , ([CampFire], [[NativeSilver]],   lambda m: [(2,Silver())])
-# , ([CampFire], [[Sphalerite]],     lambda m: [(2,Zinc())])
   , ([CampFire], [[Tetrahedrite]],   lambda m: [(2,Copper()),(1,Silver())])
-
   , ([CampFire], [[Copper,Tin]],     lambda m: [(2,Bronze())])
   , ([CampFire], [[Silver,Gold]],    lambda m: [(2,Electrum())])
-
   , ([CampFire], [[Metal],[Metal]],  lambda m: ( [], [(1,PickaxeHead(m[0][0]))] )[ m[0][0] == m[1][0] ])
   ]
+
+stonefurnace_productions = [ ([StoneFurnace], pattern, fn) for (_,pattern,fn) in campfire_productions ] + \
+  [ ([StoneFurnace], [[Clay],[Grass]], lambda m: [(1,Brick())])
+  , ([StoneFurnace], [[Galena]],       lambda m: [(2,Lead()),(1,Silver())])
+  ]
+
+brickfurnace_productions = [ ([BrickFurnace], pattern, fn) for (_,pattern,fn) in stonefurnace_productions ] + \
+  [ ([BrickFurnace], [[NativeAluminum],[Clay],[Clay],[Clay]], lambda m: [(4, FireBrick())])
+  , ([BrickFurnace], [[Hematite]],       lambda m: [(2,Iron())])
+  , ([BrickFurnace], [[Limonite]],       lambda m: [(2,Iron())])
+  , ([BrickFurnace], [[Magnetite]],      lambda m: [(2,Iron())])
+  , ([BrickFurnace], [[NativePlatinum]], lambda m: [(2,Platinum())])
+  ]
+
+firebrickfurnace_productions = [ ([FireBrickFurnace], pattern, fn) for (_,pattern,fn) in brickfurnace_productions ] + \
+  [ ([FireBrickFurnace], [[Cassiterite]],    lambda m: [(2,Tin())])
+  , ([FireBrickFurnace], [[Garnierite]],     lambda m: [(2,Nickel())])
+  , ([FireBrickFurnace], [[NativeAluminum]], lambda m: [(2,Aluminum())])
+  , ([FireBrickFurnace], [[Sphalerite]],     lambda m: [(2,Zinc())])
+  ]
+
+crafting_productions = barehand_productions + campfire_productions + stonefurnace_productions + brickfurnace_productions + firebrickfurnace_productions
 
 def TrimMatrix(matrix):
   while matrix and all(cell is None for cell in matrix[0]):
