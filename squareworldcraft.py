@@ -1129,6 +1129,21 @@ class World(Observable):
   def OnChange(self, evt):
     self.Changed()
 
+  def CollidePoint(self, p):
+    'Is cell at coordinate p in the world?  (Or does it fall off the edge?)'
+    return not( p[0] < 0 or p[1] < 0 or p[0] >= self.sz[0] or p[1] >= self.sz[1] )
+
+  def IterRect(self, aRect):
+    'Return an iterator over coordinates on the map'
+    r = pygame.Rect((0,0),self.sz).clip(aRect)
+    for row in range(r.top, r.bottom):
+      for col in range(r.left, r.right):
+        yield (col,row)
+
+  def IterRectAround(self, p, radius):
+    'Return an iterator over coordinates on the map'
+    return self.IterRect((p[0]-radius,p[1]-radius,radius+radius+1,radius+radius+1))
+
   def GroundFill(self, r, value):
     for row in range(r.height):
       for col in range(r.width):
@@ -1189,21 +1204,14 @@ class World(Observable):
         self.things[p[1]][p[0]] = (1,Grass())
         print('new grass at {}'.format(p))
 
-  def CollidePoint(self, p):
-    'Is cell at coordinate p in the world?  (Or does it fall off the edge?)'
-    return not( p[0] < 0 or p[1] < 0 or p[0] >= self.sz[0] or p[1] >= self.sz[1] )
-
   def ThingsAt(self, p):
     return self.things[p[1]][p[0]]
   def SetThingsAt(self, p, something):
     self.things[p[1]][p[0]] = something
     self.ExposeToLight(p)
   def ExposeToLight(self, p, r=2):
-    for dy in range(-r,r+1):
-      for dx in range(-r,r+1):
-        q = (p[0]+dx, p[1]+dy)
-        if self.CollidePoint(q):
-          self.lighting[q[1]][q[0]] = True
+    for q in self.IterRectAround(p,r):
+      self.lighting[q[1]][q[0]] = True
 
 def sinInterp(value, inLo, inHi, outLo, outHi):
   # TODO: replace with a table of additive color values
@@ -1244,6 +1252,7 @@ class WorldWnd(Window):
     self.world_col_stop  = self.world.player.pos[0] + half_scr_cols
     #print('half_scr_rows={}, half_scr_cols={}, toprow={}, leftcol={}'
     #      .format(half_scr_rows, half_scr_cols, self.world_row_start, self.world_col_start))
+    #for (col,row) in self.world.IterRect((self.world_col_start,self.world_row_start,half_scr_cols*2,half_scr_rows*2)):
     for row in range(self.world_row_start, self.world_row_stop):
       #print('r{0}'.format(row), end='')
       for col in range(self.world_col_start, self.world_col_stop):
@@ -1527,11 +1536,10 @@ class CatalystsPanel(Window):
     #BUGPRINT('CatalystsPanel.Rescan()')
     self.catalystThings = []
     pp = self.world.player.pos
-    for y in (-1,0,1):
-      for x in (-1,0,1):
-        (numthings, something) = self.world.ThingsAt((pp[0]+x,pp[1]+y))
-        if numthings and something and something.IsWorkstation():
-          self.catalystThings.append(something)
+    for q in self.world.IterRectAround(self.world.player.pos, 1):
+      (numthings, something) = self.world.ThingsAt(q)
+      if numthings and something and something.IsWorkstation():
+        self.catalystThings.append(something)
 
   def OnRender(self, surf):
     i = 0
